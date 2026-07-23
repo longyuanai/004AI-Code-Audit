@@ -1,0 +1,105 @@
+name: code-guard
+
+'on':
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  verify:
+    name: Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [20]
+        python: ['3.11']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run test:run
+
+  scan:
+    name: Rules + 20% LLM sample (${{ matrix.os }})
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      CODEGUARD_ENABLE_LLM: ${{ vars.CODEGUARD_ENABLE_LLM || '0' }}
+      LLM_PROVIDERS: ${{ vars.LLM_PROVIDERS }}
+      LLM_OPENAI_BASE_URL: ${{ vars.LLM_OPENAI_BASE_URL }}
+      LLM_OPENAI_DEFAULT_MODEL: ${{ vars.LLM_OPENAI_DEFAULT_MODEL }}
+      LLM_OPENAI_API_KEY: ${{ secrets.LLM_OPENAI_API_KEY }}
+      SHARED_LLM_CORE_PATH: ${{ github.workspace }}/_deps/shared-llm-core
+      CODEGUARD_PYTHON: python
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout shared LLM core
+        if: vars.SHARED_LLM_CORE_REPOSITORY != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.SHARED_LLM_CORE_REPOSITORY }}
+          path: _deps/shared-llm-core
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci
+      - run: npm run build
+      - name: Install shared LLM core for sampled review
+        if: vars.SHARED_LLM_CORE_REPOSITORY != ''
+        run: python -m pip install -e _deps/shared-llm-core
+      - name: Scan all files with rules and sample 20% for LLM
+        run: >-
+          python scripts/ci_scan.py
+          --root src
+          --artifacts artifacts
+          --sample-rate 0.20
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: codeguard-${{ matrix.os }}
+          path: artifacts/
+      - name: Upload rule SARIF to GitHub Code Scanning
+        if: >-
+          always() &&
+          matrix.os == 'ubuntu-latest' &&
+          (github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.fork == false)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: artifacts/codeguard-rules.sarif
+          category: codeguard-rules
+      - name: Upload sampled LLM SARIF
+        if: >-
+          always() &&
+          matrix.os == 'ubuntu-latest' &&
+          env.CODEGUARD_ENABLE_LLM == '1' &&
+          (github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.fork == false)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: artifacts/codeguard-llm-sample.sarif
+          category: codeguard-llm-sample

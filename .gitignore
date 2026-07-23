@@ -6,7 +6,8 @@ dist/
 .env
 .env.local
 coverage/
-.pytest-tmp/
+artifacts/
+.pytest-tmp*/
 .venv/
 .python-deps/
 __pycache__/

@@ -1,0 +1,44 @@
+stages:
+  - verify
+  - security
+
+variables:
+  CODEGUARD_ENABLE_LLM: "0"
+
+verify:
+  stage: verify
+  image: node:20-bookworm
+  script:
+    - npm ci
+    - npm run lint
+    - npm run typecheck
+    - npm run build
+    - npm run test:run
+
+codeguard:
+  stage: security
+  image: node:20-bookworm
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git python3 python3-pip
+    - npm ci
+    - npm run build
+    - >-
+      if [ "$CODEGUARD_ENABLE_LLM" = "1" ]; then
+        test -n "$SHARED_LLM_CORE_REPOSITORY";
+        git clone --depth 1 "$SHARED_LLM_CORE_REPOSITORY" _deps/shared-llm-core;
+        python3 -m pip install --break-system-packages -e _deps/shared-llm-core;
+      fi
+  script:
+    - >-
+      SHARED_LLM_CORE_PATH="$CI_PROJECT_DIR/_deps/shared-llm-core"
+      python3 scripts/ci_scan.py
+      --root src
+      --artifacts artifacts
+      --sample-rate 0.20
+  artifacts:
+    when: always
+    paths:
+      - artifacts/codeguard-rules.sarif
+      - artifacts/codeguard-llm-sample.sarif
+      - artifacts/ci-scan-summary.json
