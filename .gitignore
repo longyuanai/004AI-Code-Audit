@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.codeguard-cache/
+.claude/
+*.tsbuildinfo
+.env
+.env.local
+coverage/
+.pytest-tmp/
+.venv/
+__pycache__/
+*.py[cod]

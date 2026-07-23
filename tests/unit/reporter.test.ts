@@ -1,0 +1,404 @@
+import { describe, it, expect } from 'vitest';
+import { formatJSON } from '../../src/reporter/json.js';
+import { formatSARIF } from '../../src/reporter/sarif.js';
+import { formatText } from '../../src/reporter/text.js';
+import { formatGitHubReview } from '../../src/reporter/github.js';
+import { VERSION } from '../../src/version.js';
+import type { ScanResult, Finding } from '../../src/types/index.js';
+
+function makeScanResult(findings: Finding[] = [], overrides: Partial<ScanResult> = {}): ScanResult {
+  return {
+    files: 3,
+    suspicious: findings.length,
+    suppressed: 0,
+    baselined: 0,
+    findings,
+    skipped: [],
+    duration: 1234,
+    llmCalls: 0,
+    estimatedCost: 0,
+    cacheHits: 0,
+    ...overrides,
+  };
+}
+
+function makeFinding(overrides: Partial<Finding> = {}): Finding {
+  return {
+    id: 'finding-1',
+    ruleId: 'CG-001',
+    severity: 'critical',
+    title: 'SQL Injection',
+    description: 'Potential SQL Injection detected.',
+    file: 'src/db.ts',
+    location: {
+      start: { line: 10, column: 0 },
+      end: { line: 10, column: 50 },
+    },
+    snippet: 'pool.query(`SELECT * FROM users WHERE id = ${id}`)',
+    ...overrides,
+  };
+}
+
+// ── formatJSON ──────────────────────────────────────────────────
+
+describe('formatJSON', () => {
+  it('returns valid JSON', () => {
+    const result = makeScanResult([makeFinding()]);
+    const output = formatJSON(result);
+    expect(() => JSON.parse(output)).not.toThrow();
+  });
+
+  it('includes version field', () => {
+    const result = makeScanResult();
+    const parsed = JSON.parse(formatJSON(result));
+    expect(parsed.version).toBe(VERSION);
+  });
+
+  it('includes scan metadata', () => {
+    const result = makeScanResult([makeFinding()]);
+    const parsed = JSON.parse(formatJSON(result));
+    expect(parsed.scan.files).toBe(3);
+    expect(parsed.scan.suspicious).toBe(1);
+    expect(parsed.scan.duration).toBe(1234);
+  });
+
+  it('includes dismissed findings with their reasoning', () => {
+    const dismissed = makeFinding({
+      description: 'Potential SQL Injection detected. Dismissed by Stage 2 analysis.',
+      llmAnalysis: { confirmed: false, confidence: 0.2, reasoning: 'Parameterized query.' },
+    });
+    const result = makeScanResult([], { llmCalls: 1, dismissedFindings: [dismissed] });
+    const parsed = JSON.parse(formatJSON(result));
+    expect(parsed.findings).toHaveLength(0);
+    expect(parsed.dismissedFindings).toHaveLength(1);
+    expect(parsed.dismissedFindings[0].llmAnalysis.confirmed).toBe(false);
+    expect(parsed.dismissedFindings[0].llmAnalysis.reasoning).toBe('Parameterized query.');
+  });
+
+  it('includes findings array', () => {
+    const finding = makeFinding();
+    const result = makeScanResult([finding]);
+    const parsed = JSON.parse(formatJSON(result));
+    expect(parsed.findings).toHaveLength(1);
+    expect(parsed.findings[0].ruleId).toBe('CG-001');
+    expect(parsed.findings[0].severity).toBe('critical');
+    expect(parsed.findings[0].file).toBe('src/db.ts');
+  });
+
+  it('includes the CWE label and MITRE URI per finding (null for unmapped custom rules)', () => {
+    const parsed = JSON.parse(formatJSON(makeScanResult([
+      makeFinding({ ruleId: 'CG-001' }),
+      makeFinding({ id: 'f2', ruleId: 'CR-999' }),
+    ])));
+    expect(parsed.findings[0].cwe).toBe('CWE-89');
+    expect(parsed.findings[0].cweUri).toBe('https://cwe.mitre.org/data/definitions/89.html');
+    expect(parsed.findings[1].cwe).toBeNull();
+    expect(parsed.findings[1].cweUri).toBeNull();
+  });
+
+  it('handles empty findings', () => {
+    const result = makeScanResult();
+    const parsed = JSON.parse(formatJSON(result));
+    expect(parsed.findings).toHaveLength(0);
+  });
+
+  it('includes a severity breakdown in the scan summary', () => {
+    const parsed = JSON.parse(formatJSON(makeScanResult([
+      makeFinding({ id: 'a', severity: 'critical' }),
+      makeFinding({ id: 'b', severity: 'high' }),
+      makeFinding({ id: 'c', severity: 'high' }),
+    ])));
+    expect(parsed.scan.totalFindings).toBe(3);
+    expect(parsed.scan.severityCounts).toEqual({ critical: 1, high: 2, medium: 0, low: 0 });
+  });
+
+  it('includes fix when present', () => {
+    const finding = makeFinding({
+      fix: { description: 'Use parameterized query', code: 'db.query("SELECT ?", [id])' },
+    });
+    const result = makeScanResult([finding]);
+    const parsed = JSON.parse(formatJSON(result));
+    expect(parsed.findings[0].fix).not.toBeNull();
+    expect(parsed.findings[0].fix.description).toBe('Use parameterized query');
+  });
+
+  it('sets fix to null when absent', () => {
+    const result = makeScanResult([makeFinding()]);
+    const parsed = JSON.parse(formatJSON(result));
+    expect(parsed.findings[0].fix).toBeNull();
+  });
+
+  it('includes llmAnalysis when present', () => {
+    const finding = makeFinding({
+      llmAnalysis: {
+        confirmed: true,
+        confidence: 0.92,
+        reasoning: 'User input reaches a dangerous query sink.',
+      },
+    });
+    const result = makeScanResult([finding], { llmCalls: 1, estimatedCost: 0.123456 });
+    const parsed = JSON.parse(formatJSON(result));
+    expect(parsed.scan.llmCalls).toBe(1);
+    expect(parsed.scan.estimatedCost).toBe(0.123456);
+    expect(parsed.findings[0].llmAnalysis).not.toBeNull();
+    expect(parsed.findings[0].llmAnalysis.reasoning).toContain('dangerous query sink');
+  });
+
+  it('includes skipped files', () => {
+    const result = makeScanResult([], {
+      skipped: [{ file: 'style.css', reason: 'Unsupported language' }],
+    });
+    const parsed = JSON.parse(formatJSON(result));
+    expect(parsed.skipped).toHaveLength(1);
+    expect(parsed.skipped[0].file).toBe('style.css');
+  });
+});
+
+// ── formatSARIF ─────────────────────────────────────────────────
+
+describe('formatSARIF', () => {
+  it('returns valid JSON', () => {
+    const result = makeScanResult([makeFinding()]);
+    expect(() => JSON.parse(formatSARIF(result))).not.toThrow();
+  });
+
+  it('has correct SARIF schema and version', () => {
+    const result = makeScanResult([makeFinding()]);
+    const sarif = JSON.parse(formatSARIF(result));
+    expect(sarif.$schema).toContain('sarif-schema-2.1.0');
+    expect(sarif.version).toBe('2.1.0');
+  });
+
+  it('has tool driver info', () => {
+    const result = makeScanResult([makeFinding()]);
+    const sarif = JSON.parse(formatSARIF(result));
+    expect(sarif.runs[0].tool.driver.name).toBe('AI-CodeGuard');
+    expect(sarif.runs[0].tool.driver.version).toBe(VERSION);
+  });
+
+  it('maps severity to SARIF level correctly', () => {
+    const findings = [
+      makeFinding({ id: 'f1', severity: 'critical', ruleId: 'CG-001' }),
+      makeFinding({ id: 'f2', severity: 'high', ruleId: 'CG-010' }),
+      makeFinding({ id: 'f3', severity: 'medium', ruleId: 'CG-050' }),
+    ];
+    const sarif = JSON.parse(formatSARIF(makeScanResult(findings)));
+    expect(sarif.runs[0].results[0].level).toBe('error');
+    expect(sarif.runs[0].results[1].level).toBe('error');
+    expect(sarif.runs[0].results[2].level).toBe('warning');
+  });
+
+  it('includes location information', () => {
+    const result = makeScanResult([makeFinding()]);
+    const sarif = JSON.parse(formatSARIF(result));
+    const loc = sarif.runs[0].results[0].locations[0].physicalLocation;
+    expect(loc.region.startLine).toBe(10);
+    expect(loc.artifactLocation.uri).toBe('src/db.ts');
+  });
+
+  it('includes rules in driver', () => {
+    const result = makeScanResult([makeFinding()]);
+    const sarif = JSON.parse(formatSARIF(result));
+    expect(sarif.runs[0].tool.driver.rules.length).toBeGreaterThanOrEqual(1);
+    expect(sarif.runs[0].tool.driver.rules[0].id).toBe('CG-001');
+  });
+
+  it('tags rule descriptors with CWE, security-severity, and a MITRE helpUri', () => {
+    const result = makeScanResult([makeFinding()]);
+    const rule = JSON.parse(formatSARIF(result)).runs[0].tool.driver.rules[0];
+    expect(rule.properties.tags).toContain('security');
+    expect(rule.properties.tags).toContain('external/cwe/cwe-89');
+    expect(rule.properties['security-severity']).toBe('9.0');
+    expect(rule.helpUri).toBe('https://cwe.mitre.org/data/definitions/89.html');
+  });
+
+  it('emits a line-independent partialFingerprint per result', () => {
+    const sarif = JSON.parse(formatSARIF(makeScanResult([makeFinding()])));
+    const fp = sarif.runs[0].results[0].partialFingerprints['codeguardFingerprint/v1'];
+    expect(fp).toMatch(/^[0-9a-f]{16}$/);
+
+    // Same finding on a different line -> same fingerprint.
+    const moved = makeFinding({ location: { start: { line: 99, column: 0 }, end: { line: 99, column: 50 } } });
+    const sarif2 = JSON.parse(formatSARIF(makeScanResult([moved])));
+    expect(sarif2.runs[0].results[0].partialFingerprints['codeguardFingerprint/v1']).toBe(fp);
+  });
+
+  it('still tags a rule with no CWE mapping as security (no cwe tag / helpUri)', () => {
+    const finding = makeFinding({ ruleId: 'CR-999', title: 'Custom Rule', severity: 'medium' });
+    const rule = JSON.parse(formatSARIF(makeScanResult([finding]))).runs[0].tool.driver.rules[0];
+    expect(rule.properties.tags).toEqual(['security']);
+    expect(rule.properties['security-severity']).toBe('4.0');
+    expect(rule.helpUri).toBeUndefined();
+  });
+
+  it('handles empty findings', () => {
+    const sarif = JSON.parse(formatSARIF(makeScanResult()));
+    expect(sarif.runs[0].results).toHaveLength(0);
+  });
+
+  it('includes fix when present', () => {
+    const finding = makeFinding({
+      fix: { description: 'Use parameterized query', code: 'db.query("SELECT ?", [id])' },
+    });
+    const sarif = JSON.parse(formatSARIF(makeScanResult([finding])));
+    expect(sarif.runs[0].results[0].fixes).toBeDefined();
+    expect(sarif.runs[0].results[0].fixes[0].description.text).toBe('Use parameterized query');
+  });
+
+  it('includes llmAnalysis markdown when present', () => {
+    const finding = makeFinding({
+      llmAnalysis: {
+        confirmed: true,
+        confidence: 0.87,
+        reasoning: 'The sink is reachable from untrusted input.',
+      },
+    });
+    const sarif = JSON.parse(formatSARIF(makeScanResult([finding])));
+    expect(sarif.runs[0].results[0].message.markdown).toContain('LLM Confidence: 87%');
+    expect(sarif.runs[0].results[0].message.markdown).toContain('reachable from untrusted input');
+  });
+});
+
+// ── formatText ──────────────────────────────────────────────────
+
+describe('formatText', () => {
+  it('shows "No vulnerabilities found" for empty results', () => {
+    const output = formatText(makeScanResult());
+    expect(output).toContain('No vulnerabilities found');
+  });
+
+  it('includes finding title and rule ID', () => {
+    const output = formatText(makeScanResult([makeFinding()]));
+    expect(output).toContain('SQL Injection');
+    expect(output).toContain('CG-001');
+  });
+
+  it('shows the CWE label next to the rule ID', () => {
+    const output = formatText(makeScanResult([makeFinding()]));
+    expect(output).toContain('CWE-89');
+  });
+
+  it('omits a CWE label for an unmapped custom rule', () => {
+    const output = formatText(makeScanResult([makeFinding({ ruleId: 'CR-999' })]));
+    expect(output).not.toContain('CWE-');
+  });
+
+  it('includes file location', () => {
+    const output = formatText(makeScanResult([makeFinding()]));
+    expect(output).toContain('src/db.ts');
+  });
+
+  it('includes code snippet', () => {
+    const output = formatText(makeScanResult([makeFinding()]));
+    expect(output).toContain('pool.query');
+  });
+
+  it('includes summary with counts', () => {
+    const findings = [
+      makeFinding({ id: 'f1', severity: 'critical' }),
+      makeFinding({ id: 'f2', severity: 'high' }),
+    ];
+    const output = formatText(makeScanResult(findings));
+    expect(output).toContain('2 findings');
+    expect(output).toContain('1 critical');
+    expect(output).toContain('1 high');
+  });
+
+  it('includes duration in summary', () => {
+    const output = formatText(makeScanResult([], { duration: 2500 }));
+    expect(output).toContain('2.5s');
+  });
+
+  it('shows dismissed count in summary when Stage 2 dismissed findings', () => {
+    const dismissed = makeFinding({
+      llmAnalysis: { confirmed: false, confidence: 0.2, reasoning: 'Not exploitable.' },
+    });
+    const output = formatText(makeScanResult([], { llmCalls: 1, dismissedFindings: [dismissed] }));
+    expect(output).toContain('Dismissed by Stage 2: 1');
+  });
+
+  it('omits dismissed line when nothing was dismissed', () => {
+    const output = formatText(makeScanResult([makeFinding()]));
+    expect(output).not.toContain('Dismissed by Stage 2');
+  });
+
+  it('includes file count in summary', () => {
+    const output = formatText(makeScanResult([], { files: 10 }));
+    expect(output).toContain('10');
+  });
+
+  it('includes llmAnalysis in text output', () => {
+    const finding = makeFinding({
+      llmAnalysis: {
+        confirmed: true,
+        confidence: 0.91,
+        reasoning: 'Untrusted data flows into the SQL sink.',
+      },
+    });
+    const output = formatText(makeScanResult([finding], { llmCalls: 1, estimatedCost: 0.12 }));
+    expect(output).toContain('LLM Confidence: 91%');
+    expect(output).toContain('Untrusted data flows into the SQL sink.');
+    expect(output).toContain('LLM calls: 1');
+    expect(output).toContain('Estimated cost: $0.12');
+  });
+});
+
+// ── formatGitHubReview ──────────────────────────────────────────
+
+describe('formatGitHubReview', () => {
+  it('produces a non-blocking review payload with one comment per finding', () => {
+    const payload = JSON.parse(formatGitHubReview(makeScanResult([makeFinding()])));
+    expect(payload.event).toBe('COMMENT');
+    expect(payload.comments).toHaveLength(1);
+    expect(payload.body).toContain('1 security finding');
+    expect(payload.body).toContain('1 critical');
+  });
+
+  it('anchors each comment to the finding file/line on the RIGHT side', () => {
+    const finding = makeFinding({ file: 'src/api.ts', location: { start: { line: 42, column: 0 }, end: { line: 42, column: 10 } } });
+    const comment = JSON.parse(formatGitHubReview(makeScanResult([finding]))).comments[0];
+    expect(comment.path).toBe('src/api.ts');
+    expect(comment.line).toBe(42);
+    expect(comment.side).toBe('RIGHT');
+  });
+
+  it('includes rule id, a CWE link, and a suppression hint in the comment body', () => {
+    const body = JSON.parse(formatGitHubReview(makeScanResult([makeFinding()]))).comments[0].body;
+    expect(body).toContain('CG-001');
+    expect(body).toContain('cwe.mitre.org/data/definitions/89.html');
+    expect(body).toContain('codeguard-ignore CG-001');
+  });
+
+  it('surfaces the Stage 2 reasoning and a suggested fix when present', () => {
+    const finding = makeFinding({
+      llmAnalysis: { confirmed: true, confidence: 0.9, reasoning: 'reachable from untrusted input' },
+      fix: { description: 'Use a parameterized query', code: 'db.query("... ?", [id])' },
+    });
+    const body = JSON.parse(formatGitHubReview(makeScanResult([finding]))).comments[0].body;
+    expect(body).toContain('90% confidence');
+    expect(body).toContain('reachable from untrusted input');
+    expect(body).toContain('Use a parameterized query');
+    expect(body).toContain('db.query("... ?", [id])');
+  });
+
+  it('reports a clean pass with no comments when there are no findings', () => {
+    const payload = JSON.parse(formatGitHubReview(makeScanResult()));
+    expect(payload.comments).toHaveLength(0);
+    expect(payload.body).toContain('no new security findings');
+  });
+
+  it('widens the code fence so fix code containing ``` cannot break markdown', () => {
+    const finding = makeFinding({
+      fix: { description: 'wrap in a fence', code: 'const md = "```js\\ncode\\n```";' },
+    });
+    const body = JSON.parse(formatGitHubReview(makeScanResult([finding]))).comments[0].body;
+    // The outer fence must be longer than the 3-backtick run inside the code,
+    // so the block opens and closes with the same wider fence.
+    expect(body).toContain('````');
+    expect(body).toContain('const md = "```js');
+    // The opening fence line is exactly the wider fence (no language tag added).
+    const fenceLines = body.split('\n').filter((l: string) => /^`{4,}$/.test(l));
+    expect(fenceLines.length).toBe(2);
+    expect(fenceLines[0]).toBe(fenceLines[1]);
+  });
+});

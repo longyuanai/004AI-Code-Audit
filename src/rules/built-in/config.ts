@@ -1,0 +1,66 @@
+import type { ASTNode, SuspiciousNode } from '../../types/index.js';
+import type { BuiltInRule, RuleCheckContext } from '../engine.js';
+
+const MISCONFIG_PATTERNS = [
+  { pattern: /cors.*origin.*['"`]\*['"`]/i, name: 'CORS wildcard origin' },
+  // The raw `Access-Control-Allow-Origin: *` header (set via res.setHeader /
+  // PHP header(...)), which the `cors(...)`-keyed pattern above doesn't see.
+  // A specific origin (`...: https://app.example.com`) is not matched.
+  { pattern: /access-control-allow-origin["'\s:,)]+\*/i, name: 'CORS wildcard origin (header)' },
+  // Python: ssl._create_unverified_context() and cert_reqs=ssl.CERT_NONE both
+  // turn off certificate validation.
+  { pattern: /_create_unverified_context\s*\(/, name: 'TLS verification disabled (Python unverified context)' },
+  { pattern: /\bCERT_NONE\b/, name: 'TLS verification disabled (Python CERT_NONE)' },
+  { pattern: /secure\s*:\s*false/i, name: 'Secure flag disabled' },
+  { pattern: /httpOnly\s*:\s*false/i, name: 'HttpOnly flag disabled' },
+  { pattern: /sameSite\s*:\s*['"`]none['"`]/i, name: 'SameSite=None' },
+  { pattern: /helmet\s*\(\s*\{[^}]*contentSecurityPolicy\s*:\s*false/i, name: 'CSP disabled' },
+  { pattern: /DEBUG\s*=\s*True/i, name: 'Debug mode enabled' },
+  { pattern: /verify\s*=\s*False/i, name: 'SSL verification disabled' },
+  { pattern: /rejectUnauthorized\s*:\s*false/i, name: 'TLS verification disabled' },
+  // Go: tls.Config{InsecureSkipVerify: true}
+  { pattern: /InsecureSkipVerify\s*:\s*true/, name: 'TLS verification disabled (Go)' },
+  // Java / Spring
+  { pattern: /\.csrf\(\s*\)\s*\.disable\(\s*\)/, name: 'CSRF protection disabled (Spring)' },
+  { pattern: /\.allowedOrigins\(\s*["'`]\*["'`]/, name: 'CORS wildcard origin (Spring)' },
+  { pattern: /\bsetSecure\(\s*false\s*\)/, name: 'Secure cookie flag disabled (Java)' },
+  { pattern: /\bsetHttpOnly\(\s*false\s*\)/, name: 'HttpOnly flag disabled (Java)' },
+  // PHP: curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false) / CURLOPT_SSL_VERIFYHOST, 0
+  { pattern: /CURLOPT_SSL_VERIFY(?:PEER|HOST)\s*,\s*(?:false|0)\b/i, name: 'TLS verification disabled (PHP curl)' },
+  // PHP: ini_set('display_errors', 1) / php.ini's `display_errors = 1`
+  { pattern: /display_errors['"]?\s*(?:,|=)\s*['"]?1\b/i, name: 'Debug mode enabled (PHP)' },
+];
+
+export const securityMisconfiguration: BuiltInRule = {
+  id: 'CG-050',
+  name: 'Security Misconfiguration',
+  severity: 'medium',
+  category: 'config',
+  languages: ['javascript', 'typescript', 'python', 'go', 'java', 'php'],
+  description: 'Detects common security misconfigurations (CORS wildcard, debug mode, disabled TLS verification).',
+
+  check(node: ASTNode, ctx: RuleCheckContext): SuspiciousNode | null {
+    // Only check leaf nodes, not the root (entire file)
+    if (node.rawType === 'program') return null;
+    const text = node.text;
+
+    for (const { pattern, name } of MISCONFIG_PATTERNS) {
+      if (pattern.test(text)) {
+        return {
+          file: ctx.file,
+          language: ctx.language,
+          ruleId: 'CG-050',
+          ruleName: 'Security Misconfiguration',
+          node,
+          location: node.location,
+          snippet: ctx.getSnippet(node),
+          context: ctx.getContext(node, 2),
+          confidence: 0.7,
+          metadata: { misconfiguration: name },
+        };
+      }
+    }
+
+    return null;
+  },
+};

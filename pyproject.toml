@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "ai-codeguard-upgrade"
+version = "0.5.0"
+description = "Hybrid TypeScript/Python upgrade layer for AI-CodeGuard"
+authors = ["longyuanai"]
+license = "MIT"
+packages = [
+    { include = "analyzer", from = "src" },
+    { include = "parser", from = "src" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+shared-llm-core = { path = "../../000shared-llm-core", develop = true }
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--basetemp=.pytest-tmp"
+
