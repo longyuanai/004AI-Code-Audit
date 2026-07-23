@@ -8,6 +8,11 @@ from codeguard.dataflow import (
     DataflowRule,
     register_dataflow_rule,
 )
+from codeguard.explain import (
+    DataflowExplainer,
+    DataflowExplanation,
+    build_explanation_prompt,
+)
 from codeguard.taint import (
     TaintAnalyzer,
     TaintPath,
@@ -19,6 +24,8 @@ from codeguard.taint import (
 __all__ = [
     "CallEdge",
     "DataflowAnalyzer",
+    "DataflowExplainer",
+    "DataflowExplanation",
     "DataflowPath",
     "DataflowReport",
     "DataflowRule",
@@ -26,6 +33,7 @@ __all__ = [
     "TaintPath",
     "TaintRule",
     "TaintStep",
+    "build_explanation_prompt",
     "register_dataflow_rule",
     "register_taint_rule",
 ]

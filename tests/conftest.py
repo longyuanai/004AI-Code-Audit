@@ -63,3 +63,15 @@ class StubRouter:
 @pytest.fixture
 def stub_router() -> StubRouter:
     return StubRouter()
+
+
+@pytest.fixture
+def stub_router_with():
+    def factory(
+        *,
+        content: str,
+        model: str = "stub-model",
+    ) -> StubRouter:
+        return StubRouter(content=content, model=model)
+
+    return factory
