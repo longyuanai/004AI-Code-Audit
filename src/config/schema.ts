@@ -13,6 +13,10 @@ export const ConfigSchema = z.object({
   }).default({}),
 
   llm: z.object({
+    tier: z.enum(['cheap', 'standard', 'premium', 'local']).default('standard'),
+    routerConfig: z.string().optional(),
+    pythonCommand: z.string().optional(),
+    // Deprecated compatibility fields. Production routing ignores them.
     provider: z.enum(['claude', 'openai']).default('claude'),
     model: z.string().default('claude-sonnet-5'),
     apiKey: z.string().optional(),

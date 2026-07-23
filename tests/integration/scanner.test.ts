@@ -7,6 +7,7 @@ import { VERSION } from '../../src/version.js';
 import type { AnalyzeFindingsDependencies } from '../../src/analyzer/index.js';
 import type { ScanOptions } from '../../src/scanner/orchestrator.js';
 import type { LLMConfig } from '../../src/types/index.js';
+import { StubRouter, routerResponse } from '../helpers/stub-router.js';
 
 const FIXTURES_DIR = resolve(__dirname, '../fixtures');
 const VULNERABLE_INJECTION_FILE = resolve(FIXTURES_DIR, 'vulnerable', 'injection.ts');
@@ -315,7 +316,7 @@ patterns:
     expect(result.findings.some(finding => finding.fix)).toBe(true);
   });
 
-  it('throws when Stage 2 runs without an API key', async () => {
+  it('runs Stage 2 without a product-level API key when a router is injected', async () => {
     const options = makeOptions([VULNERABLE_INJECTION_FILE], {
       dryRun: false,
       config: {
@@ -327,8 +328,14 @@ patterns:
       },
     });
 
-    await expect(runMuted(() => scan(options))).rejects.toThrow(
-      'LLM API key is required for Stage 2 analysis',
-    );
+    const router = new StubRouter(() => routerResponse(JSON.stringify({
+      confirmed: true,
+      confidence: 0.9,
+      reasoning: 'Stub-router confirmation.',
+    })));
+    const result = await runMuted(() => scan(options, { router }));
+
+    expect(result.llmCalls).toBe(result.suspicious);
+    expect(router.calls).toHaveLength(result.suspicious);
   });
 });

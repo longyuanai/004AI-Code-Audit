@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { analyzeFindings, type AnalyzeWithLLM } from '../../src/analyzer/index.js';
 import { MemoryCacheStore } from '../../src/cache/index.js';
 import type { ASTNode, Finding, LLMConfig, SuspiciousNode } from '../../src/types/index.js';
+import { StubRouter, routerResponse } from '../helpers/stub-router.js';
 
 function makeNode(): ASTNode {
   return {
@@ -100,13 +101,18 @@ describe('analyzeFindings', () => {
     expect(result.findings[0].llmAnalysis?.confirmed).toBe(true);
   });
 
-  it('throws when API key is missing', async () => {
-    await expect(analyzeFindings({
+  it('delegates credentials to the router instead of requiring an API key', async () => {
+    const router = new StubRouter(() => routerResponse(makeConfirmedResponse()));
+    const result = await analyzeFindings({
       findings: [makeFinding()],
       suspiciousNodes: [makeSuspiciousNode()],
       llm: makeLLM({ apiKey: undefined }),
       fix: false,
-    })).rejects.toThrow('LLM API key is required for Stage 2 analysis');
+    }, { router });
+
+    expect(router.calls).toHaveLength(1);
+    expect(result.llmCalls).toBe(1);
+    expect(result.findings[0].llmAnalysis?.confirmed).toBe(true);
   });
 
   it('respects maxConcurrency while analyzing findings', async () => {

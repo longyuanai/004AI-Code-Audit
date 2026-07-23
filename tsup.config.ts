@@ -51,5 +51,9 @@ export default defineConfig({
     await Promise.all(
       WASM_ASSETS.map(asset => copyFile(asset.from, join(assetDir, asset.to))),
     );
+    await copyFile(
+      join('src', 'analyzer', 'shared_llm_bridge.py'),
+      join('dist', 'shared-llm-bridge.py'),
+    );
   },
 });

@@ -3,18 +3,16 @@ import { analyzeFindings } from '../../src/analyzer/index.js';
 import type { ASTNode, Finding, SuspiciousNode } from '../../src/types/index.js';
 
 /**
- * Opt-in acceptance test against the REAL Claude provider.
+ * Opt-in acceptance test against the REAL shared_llm_core route.
  *
  * Skipped by default so `npm run test:run` stays offline and free. To run it:
  *
- *   CODEGUARD_E2E=1 ANTHROPIC_API_KEY=sk-... npx vitest run tests/integration/llm-provider.test.ts
+ *   CODEGUARD_E2E=1 CODEGUARD_LLM_CONFIG=llm.yml npm run test:run -- tests/integration/llm-provider.test.ts
  *
- * Model defaults to Haiku to keep the cost of one acceptance run negligible;
- * override with CODEGUARD_E2E_MODEL.
+ * Keep the configured route inexpensive: this test makes one request.
  */
-const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
-const enabled = process.env.CODEGUARD_E2E === '1' && apiKey.length > 0;
-const model = process.env.CODEGUARD_E2E_MODEL ?? 'claude-haiku-4-5-20251001';
+const enabled = process.env.CODEGUARD_E2E === '1'
+  && Boolean(process.env.CODEGUARD_LLM_CONFIG || process.env.LLM_PROVIDERS);
 
 const SNIPPET = 'db.query("SELECT * FROM users WHERE id = " + req.params.id)';
 
@@ -58,23 +56,21 @@ function makeSuspiciousNode(): SuspiciousNode {
   };
 }
 
-describe.skipIf(!enabled)('Stage 2 real Claude provider (opt-in E2E)', () => {
+describe.skipIf(!enabled)('Stage 2 real LLMRouter route (opt-in E2E)', () => {
   it('confirms an obvious SQL injection end-to-end', { timeout: 60_000 }, async () => {
     const result = await analyzeFindings({
       findings: [makeFinding()],
       suspiciousNodes: [makeSuspiciousNode()],
       llm: {
+        tier: 'standard',
         provider: 'claude',
-        model,
-        apiKey,
+        model: 'router-managed',
         maxConcurrency: 1,
-        maxCostUSD: 0.5,
       },
       fix: false,
     });
 
     expect(result.llmCalls).toBe(1);
-    expect(result.estimatedCost).toBeGreaterThan(0);
     expect(result.dismissed).toHaveLength(0);
 
     const [finding] = result.findings;

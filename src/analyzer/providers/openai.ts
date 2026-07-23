@@ -46,3 +46,4 @@ export async function analyzeWithOpenAI(request: {
     outputTokens: response.usage?.completion_tokens ?? 0,
   };
 }
+

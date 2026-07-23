@@ -21,17 +21,17 @@ import type { Finding } from '../../src/types/index.js';
 //   triage accuracy — correct verdicts / all labeled findings
 //
 // The always-on tests validate the harness arithmetic with scripted
-// providers (they say nothing about LLM quality). The real measurement is
+// routers (they say nothing about LLM quality). The real measurement is
 // opt-in, mirroring tests/integration/llm-provider.test.ts:
 //
-//   CODEGUARD_E2E=1 ANTHROPIC_API_KEY=sk-... npm run triage
+//   CODEGUARD_E2E=1 CODEGUARD_LLM_CONFIG=llm.yml npm run triage
 
 const CORPUS_DIR = resolve(__dirname, '../corpus-triage');
 const LABEL_DIRECTIVE = /codeguard-(real|fp)\s+(CG-\d+)/;
 
-const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
-const e2eEnabled = process.env.CODEGUARD_E2E === '1' && apiKey.length > 0;
-const e2eModel = process.env.CODEGUARD_E2E_MODEL ?? 'claude-haiku-4-5-20251001';
+const e2eEnabled = process.env.CODEGUARD_E2E === '1'
+  && Boolean(process.env.CODEGUARD_LLM_CONFIG || process.env.LLM_PROVIDERS);
+const e2eRoute = process.env.CODEGUARD_LLM_TIER ?? 'standard';
 
 interface Label {
   file: string; // basename
@@ -83,7 +83,7 @@ async function runTriage(dependencies: AnalyzeFindingsDependencies): Promise<Tri
       paths: [CORPUS_DIR],
       config: {
         ...DEFAULT_CONFIG,
-        llm: { ...DEFAULT_CONFIG.llm, apiKey: apiKey || 'test-key', model: e2eModel },
+        llm: { ...DEFAULT_CONFIG.llm, tier: e2eRoute as 'cheap' | 'standard' | 'premium' | 'local' },
         // Disable the disk cache so repeated runs measure the model, not a replay.
         cache: { ...DEFAULT_CONFIG.cache, enabled: false },
       },
@@ -158,7 +158,7 @@ describe.skipIf(!e2eEnabled)('Stage 2 triage accuracy (real provider, opt-in)', 
     const report = await runTriage({});
 
     const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
-    console.log(`\n── Stage 2 triage report (${e2eModel}) ──`);
+    console.log(`\n── Stage 2 triage report (${e2eRoute} route) ──`);
     console.log(`labeled findings: ${report.total}`);
     console.log(`confirm-recall (real vulns confirmed): ${pct(report.confirmRecall)}`);
     console.log(`fp-dismiss-rate (false positives dismissed): ${pct(report.fpDismissRate)}`);

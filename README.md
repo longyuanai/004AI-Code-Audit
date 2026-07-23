@@ -66,7 +66,7 @@ node dist/index.js init
 node dist/index.js scan ./src --dry-run
 
 # Full scan with Stage 2
-export CODEGUARD_API_KEY="..."
+export CODEGUARD_LLM_CONFIG="./llm.yml"
 node dist/index.js scan ./src
 
 # Ask for fix suggestions during Stage 2
@@ -245,7 +245,7 @@ The current runtime pipeline is:
 
 Important runtime behavior:
 - `--dry-run` means **Stage 1 only**, so `llmCalls = 0` and `estimatedCost = 0`
-- non-dry-run scans that reach Stage 2 require `llm.apiKey` or a supported env var
+- non-dry-run scans route through `shared_llm_core.LLMRouter`; configure it with `CODEGUARD_LLM_CONFIG` or shared-core `LLM_*` variables
 - confirmed Stage 2 findings get `llmAnalysis`, and `--fix` can add `fix`
 - findings the LLM does not confirm are moved to `dismissedFindings` (JSON output) with the LLM's reasoning, and the text summary shows a dismissed count — Stage 2 suppressions stay auditable
 - the Stage 2 prompt treats scanned code as untrusted data, so comments in scanned code that try to talk the LLM into dismissing a finding are instructed against (prompt-injection hardening)
@@ -272,8 +272,8 @@ rules:
   preset: owasp-top-10
 
 llm:
-  provider: claude
-  model: claude-sonnet-5
+  tier: standard
+  # routerConfig: ./llm.yml
   maxConcurrency: 5
 
 output:
@@ -290,16 +290,22 @@ The loader supports:
 - `codeguard.config.ts`
 
 Environment variable overrides currently supported by the config loader:
-- `CODEGUARD_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `OPENAI_API_KEY`
-- `CODEGUARD_MODEL`
-- `CODEGUARD_MAX_COST`
+- `CODEGUARD_LLM_CONFIG`
+- `CODEGUARD_LLM_TIER`
+- `CODEGUARD_PYTHON`
+- `SHARED_LLM_CORE_PATH`
+- shared-core `LLM_*` provider variables
+- Legacy compatibility only:
+  - `CODEGUARD_API_KEY`
+  - `ANTHROPIC_API_KEY`
+  - `OPENAI_API_KEY`
+  - `CODEGUARD_MODEL`
+  - `CODEGUARD_MAX_COST`
 
 Stage 2 currently consumes:
-- `llm.provider`
-- `llm.model`
-- `llm.apiKey`
+- `llm.tier`
+- `llm.routerConfig`
+- `llm.pythonCommand`
 - `llm.maxConcurrency`
 - `llm.maxCostUSD`
 

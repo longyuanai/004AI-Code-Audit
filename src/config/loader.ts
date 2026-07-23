@@ -58,6 +58,18 @@ function applyEnvOverrides(config: Record<string, unknown>): void {
     config.llm = llm;
   }
 
+  if (process.env.CODEGUARD_LLM_TIER) {
+    const llm = (config.llm ?? {}) as Record<string, unknown>;
+    llm.tier = process.env.CODEGUARD_LLM_TIER;
+    config.llm = llm;
+  }
+
+  if (process.env.CODEGUARD_LLM_CONFIG) {
+    const llm = (config.llm ?? {}) as Record<string, unknown>;
+    llm.routerConfig = process.env.CODEGUARD_LLM_CONFIG;
+    config.llm = llm;
+  }
+
   if (process.env.CODEGUARD_MAX_COST) {
     const llm = (config.llm ?? {}) as Record<string, unknown>;
     llm.maxCostUSD = parseFloat(process.env.CODEGUARD_MAX_COST);

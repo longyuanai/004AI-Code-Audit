@@ -1,7 +1,10 @@
 import type { Finding, FixSuggestion, LLMConfig, LLMProvider, SuspiciousNode } from '../types/index.js';
-import { analyzeWithClaude } from './providers/claude.js';
-import { analyzeWithOpenAI } from './providers/openai.js';
 import type { CacheStore, CachedAnalysis } from '../cache/index.js';
+import {
+  SharedLLMCoreRouter,
+  type LLMRouterPort,
+  type RouterChatResponse,
+} from './router.js';
 
 export interface AnalyzeLLMRequest {
   model: string;
@@ -26,6 +29,11 @@ export interface AnalyzeFindingsOptions {
 }
 
 export interface AnalyzeFindingsDependencies {
+  router?: LLMRouterPort;
+  /**
+   * @deprecated Test-only v0.4 compatibility. New tests must inject router.
+   * Production code never loads provider SDKs.
+   */
   providers?: Partial<Record<LLMProvider, AnalyzeWithLLM>>;
   cache?: CacheStore;
 }
@@ -55,11 +63,6 @@ interface ModelPricing {
   inputPerMillion: number;
   outputPerMillion: number;
 }
-
-const DEFAULT_PROVIDERS: Record<LLMProvider, AnalyzeWithLLM> = {
-  claude: analyzeWithClaude,
-  openai: analyzeWithOpenAI,
-};
 
 const MODEL_PRICING: Array<{ provider: LLMProvider; pattern: RegExp; pricing: ModelPricing }> = [
   {
@@ -112,14 +115,12 @@ export async function analyzeFindings(
     throw new Error('Stage 2 analyzer input mismatch.');
   }
 
-  if (!options.llm.apiKey) {
-    throw new Error('LLM API key is required for Stage 2 analysis. Configure llm.apiKey or use --dry-run.');
-  }
-  // Captured after the guard: narrowing on an object property doesn't reach
-  // the worker closures below, so they take the non-optional local instead.
-  const apiKey = options.llm.apiKey;
-
-  const provider = dependencies.providers?.[options.llm.provider] ?? DEFAULT_PROVIDERS[options.llm.provider];
+  const router = dependencies.router
+    ?? createCompatibilityRouter(options.llm, dependencies.providers)
+    ?? new SharedLLMCoreRouter({
+      pythonCommand: options.llm.pythonCommand,
+      yamlPath: options.llm.routerConfig,
+    });
   const cache = dependencies.cache;
   const pricing = resolveModelPricing(options.llm.provider, options.llm.model);
 
@@ -185,22 +186,34 @@ export async function analyzeFindings(
           continue;
         }
 
-        const response = await provider({
-          model: options.llm.model,
-          apiKey,
-          systemPrompt,
-          userPrompt,
+        const response = await router.chat(options.llm.tier ?? 'standard', {
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0,
+          max_tokens: 600,
+          response_format: { type: 'json_object' },
         });
+        const normalized = normalizeRouterResponse(response);
 
         llmCalls += 1;
-        estimatedCost += estimateUsageCost(pricing, response.inputTokens, response.outputTokens);
+        const responsePricing = resolveModelPricing(
+          inferProvider(response.model, options.llm.provider),
+          response.model,
+        ) ?? pricing;
+        estimatedCost += estimateUsageCost(
+          responsePricing,
+          normalized.inputTokens,
+          normalized.outputTokens,
+        );
         estimatedCost = roundCost(estimatedCost);
 
         if (options.llm.maxCostUSD !== undefined && estimatedCost >= options.llm.maxCostUSD) {
           budgetReached = true;
         }
 
-        const analysis = parseAnalysisPayload(response.text, options.fix);
+        const analysis = parseAnalysisPayload(normalized.text, options.fix);
 
         if (cache && cacheKey) {
           const record: CachedAnalysis = {
@@ -211,8 +224,8 @@ export async function analyzeFindings(
               reasoning: analysis.reasoning,
             },
             fix: analysis.fix,
-            inputTokens: response.inputTokens,
-            outputTokens: response.outputTokens,
+            inputTokens: normalized.inputTokens,
+            outputTokens: normalized.outputTokens,
             cachedAt: Date.now(),
             schemaVersion: 1,
           };
@@ -245,6 +258,7 @@ export async function analyzeFindings(
 function buildCacheKey(candidate: AnalyzerCandidate, options: AnalyzeFindingsOptions) {
   return {
     ruleId: candidate.finding.ruleId,
+    tier: options.llm.tier ?? 'standard',
     model: options.llm.model,
     provider: options.llm.provider,
     snippet: candidate.suspiciousNode.snippet,
@@ -403,4 +417,57 @@ function estimateUsageCost(
 
 function roundCost(value: number): number {
   return Number(value.toFixed(6));
+}
+
+function normalizeRouterResponse(response: RouterChatResponse): AnalyzeLLMResponse {
+  return {
+    text: response.choices[0]?.message.content?.trim() ?? '',
+    inputTokens: response.usage?.prompt_tokens ?? 0,
+    outputTokens: response.usage?.completion_tokens ?? 0,
+  };
+}
+
+function inferProvider(model: string, fallback: LLMProvider): LLMProvider {
+  if (/^claude/i.test(model)) return 'claude';
+  if (/^(gpt|o\d)/i.test(model)) return 'openai';
+  return fallback;
+}
+
+function createCompatibilityRouter(
+  llm: LLMConfig,
+  providers?: Partial<Record<LLMProvider, AnalyzeWithLLM>>,
+): LLMRouterPort | null {
+  if (!providers) return null;
+  const provider = providers[llm.provider];
+  if (!provider) {
+    throw new Error(`No test provider supplied for "${llm.provider}". Inject a stub router instead.`);
+  }
+
+  return {
+    async chat(_tier, request) {
+      const systemPrompt = request.messages.find(message => message.role === 'system')?.content ?? '';
+      const userPrompt = request.messages.find(message => message.role === 'user')?.content ?? '';
+      const response = await provider({
+        model: llm.model,
+        apiKey: llm.apiKey ?? '',
+        systemPrompt,
+        userPrompt,
+      });
+      return {
+        id: 'legacy-test-provider',
+        model: llm.model,
+        created: 0,
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: response.text },
+          finish_reason: 'stop',
+        }],
+        usage: {
+          prompt_tokens: response.inputTokens,
+          completion_tokens: response.outputTokens,
+          total_tokens: response.inputTokens + response.outputTokens,
+        },
+      };
+    },
+  };
 }

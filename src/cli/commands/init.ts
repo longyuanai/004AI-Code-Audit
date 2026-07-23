@@ -24,8 +24,8 @@ rules:
   #   - CG-050
 
 llm:
-  provider: claude
-  model: claude-sonnet-5
+  tier: standard
+  # routerConfig: ./llm.yml
   maxConcurrency: 5
   # maxCostUSD: 1.00
 
@@ -58,7 +58,7 @@ export function createInitCommand(): Command {
         console.log('');
         console.log('Next steps:');
         console.log('  1. Edit .codeguard.yml to match your project');
-        console.log('  2. Set ANTHROPIC_API_KEY or OPENAI_API_KEY env var');
+        console.log('  2. Configure shared_llm_core (CODEGUARD_LLM_CONFIG or LLM_* env vars)');
         console.log('  3. Run: ai-codeguard scan ./src');
       } catch (error) {
         console.error('Init failed:', error instanceof Error ? error.message : error);
