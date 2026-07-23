@@ -6,6 +6,7 @@ const SQL_METHODS = ['query', 'execute', 'raw', 'exec', 'prepare'];
 const SQL_METHODS_GO = ['Query', 'QueryRow', 'QueryContext', 'QueryRowContext', 'Exec', 'ExecContext', 'Prepare', 'PrepareContext'];
 const SQL_METHODS_JAVA = ['executeQuery', 'executeUpdate', 'execute', 'prepareStatement', 'prepareCall', 'createQuery', 'createNativeQuery', 'queryForObject', 'queryForList', 'update'];
 const SQL_OBJECTS = ['db', 'database', 'connection', 'conn', 'pool', 'client', 'knex', 'sequelize', 'prisma'];
+const SQL_OBJECTS_PY = [...SQL_OBJECTS, 'cursor'];
 const SQL_OBJECTS_GO = ['db', 'database', 'conn', 'pool', 'tx', 'stmt'];
 const SQL_OBJECTS_JAVA = ['stmt', 'statement', 'conn', 'connection', 'db', 'jdbc', 'em', 'entitymanager', 'session', 'template'];
 // PHP has no receiver for its core mysqli_*/pg_* functions (globals, not
@@ -99,6 +100,7 @@ export const sqlInjection: BuiltInRule = {
     // ('feedback' is not a db; see docs/dev/REALWORLD.md).
     const objects = ctx.language === 'go' ? SQL_OBJECTS_GO
       : ctx.language === 'java' ? SQL_OBJECTS_JAVA
+      : ctx.language === 'python' ? SQL_OBJECTS_PY
       : SQL_OBJECTS;
     if (call.object && !receiverNamesAny(call.object, objects, SQL_SUFFIXES)) {
       return null;

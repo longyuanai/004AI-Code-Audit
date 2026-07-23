@@ -8,7 +8,8 @@ import pytest
 
 SHARED_SRC = Path(__file__).resolve().parents[3] / "000shared-llm-core" / "src"
 PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
-for source_root in (SHARED_SRC, PROJECT_SRC):
+LOCAL_DEPS = Path(__file__).resolve().parents[1] / ".python-deps"
+for source_root in (LOCAL_DEPS, SHARED_SRC, PROJECT_SRC):
     source = str(source_root)
     if source not in sys.path:
         sys.path.insert(0, source)
@@ -62,4 +63,3 @@ class StubRouter:
 @pytest.fixture
 def stub_router() -> StubRouter:
     return StubRouter()
-

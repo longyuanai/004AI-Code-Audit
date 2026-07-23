@@ -8,5 +8,6 @@ dist/
 coverage/
 .pytest-tmp/
 .venv/
+.python-deps/
 __pycache__/
 *.py[cod]

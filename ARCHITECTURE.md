@@ -8,7 +8,7 @@
 
 AI-CodeGuard 当前是一个 **Node.js + TypeScript CLI 安全扫描器**，核心能力是：
 
-- 扫描 JavaScript / TypeScript / Python 文件
+- 扫描 JavaScript / TypeScript / Python / Go / Java / PHP 文件
 - 通过 Tree-sitter 归一化解析提取可疑结构
 - 使用 built-in rules + 可选 custom rules 执行静态预过滤
 - 在非 `dryRun` 情况下对可疑结果执行 Stage 2 LLM 二次确认
@@ -241,7 +241,7 @@ export interface ScanResult {
 当前 parser 已切换为 **Tree-sitter 驱动的归一化实现**。
 
 它会：
-- 通过 `web-tree-sitter` + JS / TSX / Python grammars 解析源码
+- 通过 `web-tree-sitter` + JS / TSX / Python / Go / Java / PHP grammars 解析源码
 - 向规则层继续暴露兼容的归一化节点
 - 保留当前规则依赖的动态参数标记子节点
 
@@ -259,7 +259,7 @@ export interface ScanResult {
 
 #### 当前实现边界
 
-- 仍只支持 JS / TS / Python
+- 当前支持 JS / TS / Python / Go / Java / PHP；其他语言会作为 unsupported 跳过
 - 仍未实现跨文件符号解析、CFG 或 taint tracking
 - 为兼容现有规则，解析层输出的是归一化 AST，而不是直接暴露 Tree-sitter 原生节点
 - 构建产物需要同时携带 `web-tree-sitter` 与 grammar wasm 资产
@@ -394,7 +394,7 @@ npm run test:run
 
 1. 默认非 `dryRun` 扫描在进入 Stage 2 时需要 API key
 2. custom rules 已接线，且 `rules validate/create/test` 已提供当前 CLI 工作流
-3. 语言支持仅限 JS / TS / Python
+3. 语言支持为 JS / TS / Python / Go / Java / PHP，尚未覆盖 C/C++、Rust 等目标语言
 4. 没有正式的 GitHub Action 打包与发布产物
 5. 成本估算依赖内置模型定价映射，不覆盖所有模型名
 6. cache 结构已定义，但当前主流程未使用
