@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from importlib import import_module
 from pathlib import Path
@@ -14,6 +15,36 @@ for source_root in (LOCAL_DEPS, SHARED_SRC, PROJECT_SRC):
     source = str(source_root)
     if source not in sys.path:
         sys.path.insert(0, source)
+
+
+def _ensure_pythonpath() -> None:
+    """Expose product sources and bundled wheels to every child process."""
+
+    current = os.environ.get("PYTHONPATH", "")
+    existing = current.split(os.pathsep) if current else []
+    required = (str(PROJECT_SRC), str(LOCAL_DEPS))
+    parts = [*required, *(part for part in existing if part not in required)]
+    os.environ["PYTHONPATH"] = os.pathsep.join(parts)
+
+
+_ensure_pythonpath()
+
+
+# JSONSubprocessAdapter.scan() only injects <repo>/src into the child
+# env's PYTHONPATH, not .python-deps/. Without this autouse fixture the
+# tree-sitter language bindings (tree_sitter_python / _go / _java) are
+# unimportable in the adapter subprocess and the taint/dataflow rules
+# emit zero findings.
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_python_deps_in_pythonpath() -> None:
+    deps = str(LOCAL_DEPS)
+    current = os.environ.get("PYTHONPATH", "")
+    parts = current.split(os.pathsep) if current else []
+    if deps in parts:
+        return
+    os.environ["PYTHONPATH"] = (
+        os.pathsep.join((deps, *parts)) if parts else deps
+    )
 
 from shared_llm_core import (  # noqa: E402
     ChatChoice,

@@ -28,4 +28,6 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+python_files = ["conftest.py", "test_*.py"]
 addopts = "--basetemp=.pytest-tmp"
+cache_dir = "C:/pytest-cache/004"
