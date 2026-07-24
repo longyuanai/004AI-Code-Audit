@@ -12,8 +12,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 
+from codeguard import rules
 from codeguard.dataflow import DataflowRule, register_dataflow_rule
-from codeguard.taint import TaintRule, register_taint_rule
+from codeguard.rules.taint import TaintSourceToSinkRule
+from codeguard.taint import TaintAnalyzer
 from codeguard.v05 import Finding, RuleContext, RuleEngine
 
 SUPPORTED_LANGUAGES = ("python", "go", "java")
@@ -23,9 +25,9 @@ LANGUAGE_EXTENSIONS = {
     "java": ".java",
 }
 RULE_ALIASES = {
-    TaintRule.id: TaintRule.id,
+    TaintSourceToSinkRule.id: TaintSourceToSinkRule.id,
     DataflowRule.id: DataflowRule.id,
-    "taint": TaintRule.id,
+    "taint": TaintSourceToSinkRule.id,
     "dataflow": DataflowRule.id,
 }
 EXCLUDED_PARTS = {
@@ -71,21 +73,39 @@ def _scan_local_payload(
     languages, language_warnings = _languages(payload)
     rule_ids, rule_warnings = _rule_ids(payload)
     files = _discover_files(repo_path, languages)
-    registry = register_taint_rule()
+    registry = rules.default()
     register_dataflow_rule(registry)
     engine = RuleEngine(registry)
+    core_rule_ids = tuple(
+        rule.id
+        for rule in registry.all()
+        if rule.id
+        not in {TaintSourceToSinkRule.id, DataflowRule.id}
+    )
     findings: list[dict[str, Any]] = []
 
     for source_file, language in files:
+        source = source_file.read_bytes()
+        facts = {
+            "source": source,
+            "language": language,
+            "file": str(source_file),
+        }
         context = RuleContext(
             subject=str(source_file),
-            facts={
-                "source": source_file.read_bytes(),
-                "language": language,
-                "file": str(source_file),
-            },
+            facts=facts,
         )
-        for finding in engine.evaluate(context, rule_ids=rule_ids):
+        file_rule_ids = tuple(
+            rule_id
+            for rule_id in rule_ids
+            if rule_id != TaintSourceToSinkRule.id
+        )
+        if "rules" not in payload:
+            file_rule_ids = (*core_rule_ids, *file_rule_ids)
+        for finding in engine.evaluate(
+            context,
+            rule_ids=file_rule_ids,
+        ):
             findings.append(
                 _finding_envelope(
                     finding,
@@ -94,6 +114,29 @@ def _scan_local_payload(
                     language=language,
                 )
             )
+        if TaintSourceToSinkRule.id not in rule_ids:
+            continue
+        for path in TaintAnalyzer().analyze(
+            source,
+            language,
+            file=str(source_file),
+        ):
+            flow_context = RuleContext(
+                subject=str(source_file),
+                facts={**facts, "taint_flow": path.to_dict()},
+            )
+            for finding in engine.evaluate(
+                flow_context,
+                rule_ids=[TaintSourceToSinkRule.id],
+            ):
+                findings.append(
+                    _finding_envelope(
+                        finding,
+                        source_file=source_file,
+                        repo_path=repo_path,
+                        language=language,
+                    )
+                )
 
     findings.sort(
         key=lambda finding: (
@@ -319,7 +362,10 @@ def _languages(
 def _rule_ids(
     payload: dict[str, Any],
 ) -> tuple[tuple[str, ...], list[str]]:
-    raw_rules = payload.get("rules", [TaintRule.id, DataflowRule.id])
+    raw_rules = payload.get(
+        "rules",
+        [TaintSourceToSinkRule.id, DataflowRule.id],
+    )
     if not isinstance(raw_rules, list) or not all(
         isinstance(rule, str) for rule in raw_rules
     ):
