@@ -96,6 +96,36 @@ node dist/index.js rules validate ./custom-rules
 node dist/index.js rules test ./custom-rules ./src --output json
 ```
 
+### IntegrationGateway：扫描本地仓库 / Git URL
+
+Python v0.6 adapter CLI 输出 shared-integration 可直接消费的 Finding
+JSON envelope。Windows 下请使用与 bundled tree-sitter binding 匹配的
+Python 3.14：
+
+```powershell
+$payload = '{"repo_path":"C:\\work\\service","languages":["python","go","java"]}'
+python -m ai_codeguard.cli scan --input $payload --json
+
+# 也可从 stdin 读取 payload
+'{"repo_path":"samples/mini_repo"}' |
+  python -m ai_codeguard.cli scan --json
+```
+
+Git URL 使用浅克隆；`--repo-path` 同时提供时可在网络或 clone 失败后
+安全降级到本地仓库：
+
+```powershell
+python -m ai_codeguard.cli scan `
+  --git-url https://example.invalid/team/service.git `
+  --repo-path C:\work\service `
+  --json
+```
+
+payload 中也可直接使用 `{"git_url":"..."}`，供
+`shared_integration.adapters.CodeAdapter` 调用。支持 `rules` 过滤：
+`004-taint-source-to-sink` / `004-cross-function-dataflow`（也接受
+`taint` / `dataflow` 简写）。
+
 ### PR review bot (BYO-key)
 
 `--output github` produces a [GitHub PR review payload](https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request) — a summary plus one inline comment per finding (rule, CWE link, Stage 2 reasoning, suggested fix, and a copy-paste suppression hint). It carries no credentials; a thin workflow step submits it with the repo's built-in `GITHUB_TOKEN`, and you bring your own LLM key as a secret (nothing goes to a hosted service). See [`docs/examples/pr-review.yml`](docs/examples/pr-review.yml) — it scans only the PR's changed files and passes the PR diff via `--diff`, so comments land only on changed *lines* (pre-existing findings in touched files are dropped before Stage 2, costing no LLM calls), and it falls back to a Stage-1-only advisory pass when no key is set.

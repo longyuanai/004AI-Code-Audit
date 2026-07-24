@@ -5,9 +5,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 import sys
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Iterator, Sequence
 
 from codeguard.dataflow import DataflowRule, register_dataflow_rule
 from codeguard.taint import TaintRule, register_taint_rule
@@ -40,8 +43,31 @@ class CLIInputError(ValueError):
     """Raised for malformed adapter input."""
 
 
+class GitCloneError(CLIInputError):
+    """Raised when a shallow clone cannot be completed."""
+
+
 def scan_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    repo_path = _repo_path(payload)
+    with _materialize_repo(payload) as (
+        repo_path,
+        repository_source,
+        acquisition_warnings,
+    ):
+        return _scan_local_payload(
+            payload,
+            repo_path=repo_path,
+            repository_source=repository_source,
+            acquisition_warnings=acquisition_warnings,
+        )
+
+
+def _scan_local_payload(
+    payload: dict[str, Any],
+    *,
+    repo_path: Path,
+    repository_source: str,
+    acquisition_warnings: list[str],
+) -> dict[str, Any]:
     languages, language_warnings = _languages(payload)
     rule_ids, rule_warnings = _rule_ids(payload)
     files = _discover_files(repo_path, languages)
@@ -80,11 +106,16 @@ def scan_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "findings": findings,
         "summary": {
             "repo_path": str(repo_path),
+            "repository_source": repository_source,
             "files_scanned": len(files),
             "languages": list(languages),
             "rules": list(rule_ids),
         },
-        "warnings": [*language_warnings, *rule_warnings],
+        "warnings": [
+            *acquisition_warnings,
+            *language_warnings,
+            *rule_warnings,
+        ],
     }
 
 
@@ -108,6 +139,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Emit the integration JSON envelope.",
     )
+    parser.add_argument(
+        "--repo-path",
+        help="Local repository path; also used as git clone fallback.",
+    )
+    parser.add_argument(
+        "--git-url",
+        help="Git URL to shallow-clone before scanning.",
+    )
     return parser
 
 
@@ -116,7 +155,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     del args.command
     try:
-        payload = _load_payload(args.input)
+        payload = _payload_from_args(
+            raw_input=args.input,
+            repo_path=args.repo_path,
+            git_url=args.git_url,
+        )
         envelope = scan_payload(payload)
     except (CLIInputError, json.JSONDecodeError) as error:
         if args.json:
@@ -161,7 +204,24 @@ def _load_payload(raw_input: str | None) -> dict[str, Any]:
     return decoded
 
 
-def _repo_path(payload: dict[str, Any]) -> Path:
+def _payload_from_args(
+    *,
+    raw_input: str | None,
+    repo_path: str | None,
+    git_url: str | None,
+) -> dict[str, Any]:
+    if raw_input is None and (repo_path is not None or git_url is not None):
+        payload: dict[str, Any] = {}
+    else:
+        payload = _load_payload(raw_input)
+    if repo_path is not None:
+        payload["repo_path"] = repo_path
+    if git_url is not None:
+        payload["git_url"] = git_url
+    return payload
+
+
+def _local_repo_path(payload: dict[str, Any]) -> Path:
     raw_path = payload.get("repo_path")
     if not isinstance(raw_path, str) or not raw_path.strip():
         raise CLIInputError("payload.repo_path must be a non-empty path")
@@ -169,6 +229,62 @@ def _repo_path(payload: dict[str, Any]) -> Path:
     if not repo_path.is_dir():
         raise CLIInputError(f"repo_path is not a directory: {repo_path}")
     return repo_path
+
+
+@contextmanager
+def _materialize_repo(
+    payload: dict[str, Any],
+) -> Iterator[tuple[Path, str, list[str]]]:
+    raw_git_url = payload.get("git_url")
+    if raw_git_url is None:
+        yield _local_repo_path(payload), "local", []
+        return
+    if not isinstance(raw_git_url, str) or not raw_git_url.strip():
+        raise CLIInputError("payload.git_url must be a non-empty string")
+
+    with tempfile.TemporaryDirectory(prefix="ai-codeguard-git-") as temp:
+        destination = Path(temp) / "repository"
+        try:
+            _clone_repository(raw_git_url, destination)
+        except GitCloneError as error:
+            raw_fallback = payload.get("repo_path")
+            if not isinstance(raw_fallback, str) or not raw_fallback.strip():
+                raise
+            fallback = _local_repo_path(payload)
+            yield (
+                fallback,
+                "local-fallback",
+                [f"Git clone failed; used repo_path fallback: {error}"],
+            )
+            return
+        yield destination.resolve(), "git", []
+
+
+def _clone_repository(git_url: str, destination: Path) -> None:
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--",
+                git_url,
+                str(destination),
+            ],
+            capture_output=True,
+            check=False,
+            shell=False,
+        )
+    except OSError as error:
+        raise GitCloneError(f"unable to start git: {error}") from error
+    if result.returncode == 0:
+        return
+    detail = result.stderr.decode("utf-8", errors="replace").strip()
+    raise GitCloneError(
+        f"git clone exited with {result.returncode}: "
+        f"{detail or 'no error output'}"
+    )
 
 
 def _languages(
