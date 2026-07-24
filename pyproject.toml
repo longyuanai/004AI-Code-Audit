@@ -6,6 +6,7 @@ authors = ["longyuanai"]
 license = "MIT"
 packages = [
     { include = "analyzer", from = "src" },
+    { include = "ai_codeguard", from = "src" },
     { include = "codeguard", from = "src" },
     { include = "parser", from = "src" },
 ]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
@@ -75,3 +76,10 @@ def stub_router_with():
         return StubRouter(content=content, model=model)
 
     return factory
+
+
+@pytest.fixture
+def cp314_tree_sitter_binding():
+    binding = import_module("tree_sitter._binding")
+    assert "cp314" in str(binding.__file__)
+    return binding
