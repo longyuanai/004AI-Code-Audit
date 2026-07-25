@@ -7,7 +7,7 @@ from ai_code_audit.scanner import scan_diff
 
 
 def test_scan_diff_only_scans_changed_files(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
     tmp_path: Path,
 ) -> None:
     repository = _repository(tmp_path)
@@ -32,7 +32,7 @@ def test_scan_diff_only_scans_changed_files(
 
 
 def test_scan_diff_ignores_sink_outside_changed_lines(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
     tmp_path: Path,
 ) -> None:
     repository = _repository(tmp_path)

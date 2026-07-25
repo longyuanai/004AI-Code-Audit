@@ -7,8 +7,10 @@ import pytest
 from ai_codeguard.cli import scan_payload
 from codeguard.rules import default
 from codeguard.rules.taint import TaintSourceToSinkRule
-from shared_llm_core.finding import Finding, FindingSource
-from shared_llm_core.rule_engine import (
+from codeguard.v05 import (
+    USING_SHARED_V05,
+    Finding,
+    FindingSource,
     Rule,
     RuleContext,
     RuleEngine,
@@ -37,8 +39,18 @@ def test_taint_rule_id_is_unique_in_default_registry() -> None:
     rule_ids = [rule.id for rule in default().all()]
 
     assert TaintSourceToSinkRule.id in rule_ids
-    assert {"core-brute-force", "core-known-cve"}.issubset(rule_ids)
     assert len(rule_ids) == len(set(rule_ids))
+
+
+@pytest.mark.skipif(
+    not USING_SHARED_V05,
+    reason="core-* built-ins ship with shared_llm_core, not with the "
+    "local v0.5 fallback contract",
+)
+def test_default_registry_includes_shared_core_builtins() -> None:
+    rule_ids = [rule.id for rule in default().all()]
+
+    assert {"core-brute-force", "core-known-cve"}.issubset(rule_ids)
 
 
 def test_rule_registry_duplicate_id_raises_value_error() -> None:
@@ -109,7 +121,7 @@ def test_rule_engine_failure_logs_to_stderr_without_raising(
 
 
 def test_cli_scan_python_repo_returns_finding(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
     tmp_path: Path,
 ) -> None:
     (tmp_path / "unsafe.py").write_text(
@@ -132,7 +144,7 @@ def test_cli_scan_python_repo_returns_finding(
 
 
 def test_cli_scan_empty_repo_returns_no_findings(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
     tmp_path: Path,
 ) -> None:
     envelope = scan_payload(

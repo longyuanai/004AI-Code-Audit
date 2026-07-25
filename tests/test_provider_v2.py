@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from analyzer.providers.claude_v2 import (
+pytest.importorskip(
+    "shared_llm_core",
+    reason="v2 provider adapters route through shared_llm_core.LLMRouter",
+)
+
+from analyzer.providers.claude_v2 import (  # noqa: E402
     ClaudeV2Provider,
     analyze_with_claude_v2,
 )

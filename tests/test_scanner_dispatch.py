@@ -33,7 +33,7 @@ def test_extension_dispatch_covers_phase2_languages() -> None:
 
 
 def test_mixed_repository_dispatches_each_adapter(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     selected = ("cpp", "java", "go", "typescript")
     files = discover_files(SAMPLES, selected)

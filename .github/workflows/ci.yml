@@ -37,6 +37,53 @@ jobs:
       - name: Run tests
         run: npm run test:run
 
+  # The Python half of this repo (src/ai_code_audit, src/codeguard,
+  # src/ai_codeguard, src/analyzer, src/parser) had no CI coverage at all:
+  # every workflow ran only `npm run test:run`, so the pytest suite could sit
+  # broken indefinitely. It must keep passing without shared_llm_core and
+  # shared_integration, which are unpublished sibling checkouts unavailable
+  # here -- tests that genuinely need them skip themselves.
+  python-tests:
+    name: pytest (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Installed with pip rather than `poetry install` because pyproject
+      # declares shared-llm-core as a path dependency on a sibling directory
+      # that does not exist in a fresh checkout, which fails resolution.
+      # Grammar pins are kept in sync with pyproject by hand.
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            'pytest>=8.2' \
+            'jsonschema>=4.26' \
+            'tree-sitter>=0.25,<0.27' \
+            'tree-sitter-cpp==0.23.4' \
+            'tree-sitter-python==0.25.0' \
+            'tree-sitter-go==0.25.0' \
+            'tree-sitter-java==0.23.5' \
+            'tree-sitter-typescript==0.23.2'
+
+      - name: Configure git identity for repository fixtures
+        run: |
+          git config --global user.email "ci@example.invalid"
+          git config --global user.name "CI"
+
+      - name: Run pytest
+        run: python -m pytest -q
+
   # Smoke-tests the composite action itself (action.yml), which the unit
   # suite cannot cover: vulnerable fixtures must yield findings and a valid
   # SARIF file; safe fixtures must yield zero findings and exit 0.

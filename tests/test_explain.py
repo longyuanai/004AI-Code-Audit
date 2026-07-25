@@ -1,6 +1,11 @@
 import pytest
 
-from shared_llm_core import TaskTier
+pytest.importorskip(
+    "shared_llm_core",
+    reason="LLM explanation path requires the shared_llm_core checkout",
+)
+
+from shared_llm_core import TaskTier  # noqa: E402
 
 from codeguard.dataflow import CallEdge, DataflowPath
 from codeguard.explain import (

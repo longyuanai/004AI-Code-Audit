@@ -1,5 +1,12 @@
-from analyzer.dual_channel import DualChannelScheduler, RuleMatch
-from analyzer.providers.claude_v2 import ClaudeV2Provider
+import pytest
+
+pytest.importorskip(
+    "shared_llm_core",
+    reason="the dual-channel scheduler drives shared_llm_core providers",
+)
+
+from analyzer.dual_channel import DualChannelScheduler, RuleMatch  # noqa: E402
+from analyzer.providers.claude_v2 import ClaudeV2Provider  # noqa: E402
 
 
 def match(**overrides) -> RuleMatch:

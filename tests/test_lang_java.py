@@ -8,7 +8,7 @@ SAMPLES = ROOT / "samples" / "java"
 
 
 def test_java_adapter_extracts_methods_and_classes(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     adapter = JavaLanguageAdapter()
     tree = adapter.parser().parse((SAMPLES / "Demo.java").read_bytes())
@@ -19,7 +19,7 @@ def test_java_adapter_extracts_methods_and_classes(
 
 
 def test_java_samples_include_safe_and_unsafe_files(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     result = scan_repository(SAMPLES, ["java"])
 

@@ -1,6 +1,6 @@
 """004 product rules registered with shared-llm-core v0.5."""
 
-from shared_llm_core.rule_engine import RuleRegistry
+from codeguard.v05 import RuleRegistry
 
 from .taint import TaintSourceToSinkRule
 

@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from shared_llm_core.finding import Finding, FindingSeverity, FindingSource
-from shared_llm_core.rule_engine import Rule, RuleContext
+from codeguard.v05 import (
+    Finding,
+    FindingSeverity,
+    FindingSource,
+    Rule,
+    RuleContext,
+)
 
 
 class TaintSourceToSinkRule(Rule):

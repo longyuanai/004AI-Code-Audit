@@ -13,7 +13,16 @@ INTEGRATION_SRC = SUITE_ROOT / "000shared-integration" / "src"
 if str(INTEGRATION_SRC) not in sys.path:
     sys.path.insert(0, str(INTEGRATION_SRC))
 
-from shared_integration.adapters.code import CodeAdapter
+import pytest
+
+# shared_integration lives in the sibling 000shared-integration checkout and
+# is not declared as a dependency at all, so it is absent in CI.
+pytest.importorskip(
+    "shared_integration",
+    reason="requires the sibling 000shared-integration checkout",
+)
+
+from shared_integration.adapters.code import CodeAdapter  # noqa: E402
 
 
 def _run_cli(payload: dict[str, object]) -> dict[str, object]:
@@ -47,7 +56,7 @@ def _run_cli(payload: dict[str, object]) -> dict[str, object]:
     return json.loads(result.stdout)
 
 
-def test_scan_local_repo(cp314_tree_sitter_binding) -> None:
+def test_scan_local_repo(tree_sitter_binding) -> None:
     envelope = _run_cli(
         {
             "repo_path": str(PROJECT_ROOT / "samples" / "mini_repo"),
@@ -65,7 +74,7 @@ def test_scan_local_repo(cp314_tree_sitter_binding) -> None:
     assert all(Path(finding["host"]).is_absolute() for finding in envelope["findings"])
 
 
-def test_scan_with_rules_filter(cp314_tree_sitter_binding) -> None:
+def test_scan_with_rules_filter(tree_sitter_binding) -> None:
     envelope = _run_cli(
         {
             "repo_path": str(PROJECT_ROOT / "samples" / "mini_repo"),
@@ -81,7 +90,7 @@ def test_scan_with_rules_filter(cp314_tree_sitter_binding) -> None:
 
 
 def test_scan_unsupported_language_graceful(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     envelope = _run_cli(
         {
@@ -96,7 +105,7 @@ def test_scan_unsupported_language_graceful(
 
 
 def test_json_subprocess_code_adapter_end_to_end(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     async def collect():
         return [

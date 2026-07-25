@@ -9,7 +9,7 @@ from ai_codeguard import cli
 
 
 def test_git_url_clone_failure_falls_back(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -39,7 +39,7 @@ def test_git_url_clone_failure_falls_back(
 
 
 def test_local_git_url_is_shallow_cloned_and_scanned(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
     tmp_path: Path,
 ) -> None:
     source_repo = tmp_path / "source"
@@ -68,7 +68,7 @@ def test_local_git_url_is_shallow_cloned_and_scanned(
 
 
 def test_git_clone_failure_without_fallback_is_error(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
     monkeypatch,
 ) -> None:
     def fail_clone(git_url: str, destination: Path) -> None:

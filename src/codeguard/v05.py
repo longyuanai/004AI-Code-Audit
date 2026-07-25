@@ -16,6 +16,7 @@ from enum import Enum
 from typing import Any, Literal, Mapping, Sequence
 
 try:
+    # Preferred: the v0.5 names promoted to the package root.
     from shared_llm_core import (  # type: ignore[attr-defined]
         Finding,
         FindingSeverity,
@@ -28,7 +29,28 @@ try:
 
     USING_SHARED_V05 = True
 except ImportError:
-    USING_SHARED_V05 = False
+    try:
+        # The frozen v0.1.0 checkout does not re-export at the root, but it
+        # does ship the same classes in these submodules. Prefer them over
+        # the local definitions so a real shared core keeps its built-in
+        # rule registry instead of silently degrading to an empty one.
+        from shared_llm_core.finding import (  # type: ignore[import-not-found]
+            Finding,
+            FindingSeverity,
+            FindingSource,
+        )
+        from shared_llm_core.rule_engine import (  # type: ignore[import-not-found]
+            Rule,
+            RuleContext,
+            RuleEngine,
+            RuleRegistry,
+        )
+
+        USING_SHARED_V05 = True
+    except ImportError:
+        USING_SHARED_V05 = False
+
+if not USING_SHARED_V05:
 
     class FindingSource(str, Enum):
         SOC = "001"
@@ -127,10 +149,20 @@ except ImportError:
             self._rules: dict[str, Rule] = {}
 
         def register(self, rule: Rule) -> None:
+            # The shared contract rejects duplicate ids rather than silently
+            # overwriting; mirror it so callers behave identically whether or
+            # not the real shared core is installed.
+            if rule.id in self._rules:
+                raise ValueError(
+                    f"rule id {rule.id!r} is already registered"
+                )
             self._rules[rule.id] = rule
 
         def get(self, rule_id: str) -> Rule:
-            return self._rules[rule_id]
+            try:
+                return self._rules[rule_id]
+            except KeyError:
+                raise KeyError(f"rule id {rule_id!r} not found") from None
 
         def all(self) -> list[Rule]:
             return list(self._rules.values())

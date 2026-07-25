@@ -8,6 +8,7 @@ dist/
 coverage/
 artifacts/
 .pytest-tmp*/
+.pytest_cache/
 .venv/
 .python-deps/
 __pycache__/
