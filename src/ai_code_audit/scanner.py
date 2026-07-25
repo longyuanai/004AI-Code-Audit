@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
+from ai_code_audit.gitutils import collect_diff
 from ai_code_audit.languages import (
     LanguageAdapter,
     adapter_for_path,
@@ -125,6 +126,28 @@ def scan_repository(
     }
 
 
+def scan_diff(
+    repo_path: str | Path,
+    base_ref: str,
+    head_ref: str,
+    languages: Sequence[str] | None = None,
+) -> dict[str, object]:
+    diff = collect_diff(repo_path, base_ref, head_ref)
+    envelope = scan_repository(
+        repo_path,
+        languages,
+        include_files=diff.files,
+        line_ranges=diff.line_ranges,
+    )
+    envelope["summary"]["repository_source"] = "git-diff"
+    envelope["summary"]["diff"] = {
+        "base": base_ref,
+        "head": head_ref,
+        "files": list(diff.files),
+    }
+    return envelope
+
+
 def _parser_for_file(adapter: LanguageAdapter, path: Path):
     if isinstance(adapter, TypeScriptLanguageAdapter):
         return adapter.parser_for_extension(path.suffix)
@@ -204,4 +227,4 @@ def _relative_key(root: Path, path: str | Path) -> str:
     return candidate.as_posix()
 
 
-__all__ = ["discover_files", "scan_repository"]
+__all__ = ["discover_files", "scan_diff", "scan_repository"]

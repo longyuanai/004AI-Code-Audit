@@ -13,7 +13,8 @@ from ai_code_audit.output import (
     render_envelope,
     render_sarif,
 )
-from ai_code_audit.scanner import scan_repository
+from ai_code_audit.gitutils import GitDiffError
+from ai_code_audit.scanner import scan_diff, scan_repository
 from ai_codeguard.cli import (
     CLIInputError,
     _materialize_repo,
@@ -28,21 +29,47 @@ def scan_payload(payload: dict[str, Any]) -> dict[str, object]:
         or not all(isinstance(item, str) for item in languages)
     ):
         raise CLIInputError("payload.languages must be a list of strings")
+    diff = _diff_input(payload)
     with _materialize_repo(payload) as (
         repo_path,
         repository_source,
         acquisition_warnings,
     ):
         try:
-            envelope = scan_repository(repo_path, languages)
-        except (KeyError, ValueError) as error:
+            envelope = (
+                scan_diff(
+                    repo_path,
+                    diff["base"],
+                    diff["head"],
+                    languages,
+                )
+                if diff is not None
+                else scan_repository(repo_path, languages)
+            )
+        except (GitDiffError, KeyError, ValueError) as error:
             raise CLIInputError(str(error)) from error
-        envelope["summary"]["repository_source"] = repository_source
+        if diff is None:
+            envelope["summary"]["repository_source"] = repository_source
         envelope["warnings"] = [
             *acquisition_warnings,
             *envelope["warnings"],
         ]
         return envelope
+
+
+def _diff_input(payload: dict[str, Any]) -> dict[str, str] | None:
+    raw_diff = payload.get("diff")
+    if raw_diff is None:
+        return None
+    if not isinstance(raw_diff, dict):
+        raise CLIInputError("payload.diff must be an object")
+    base = raw_diff.get("base")
+    head = raw_diff.get("head")
+    if not isinstance(base, str) or not base:
+        raise CLIInputError("payload.diff.base must be a non-empty string")
+    if not isinstance(head, str) or not head:
+        raise CLIInputError("payload.diff.head must be a non-empty string")
+    return {"base": base, "head": head}
 
 
 def build_parser() -> argparse.ArgumentParser:
