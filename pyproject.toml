@@ -23,6 +23,7 @@ tree-sitter-java = "0.23.5"
 tree-sitter-typescript = "0.23.2"
 
 [tool.poetry.group.dev.dependencies]
+jsonschema = "^4.26.0"
 pytest = "^8.2.0"
 
 [build-system]
