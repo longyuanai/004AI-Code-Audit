@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_pyproject_declares_upgrade_package() -> None:
     config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert config["tool"]["poetry"]["name"] == "ai-codeguard-upgrade"
-    assert config["tool"]["poetry"]["version"] == "0.5.0"
+    assert config["tool"]["poetry"]["version"] == "0.6.0"
 
 
 def test_pyproject_uses_shared_core_path_dependency() -> None:
