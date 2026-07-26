@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -39,6 +41,26 @@ EXCLUDED_PARTS = {
     "dist",
     "node_modules",
 }
+
+# `git_url` reaches this process from adapter callers, and `git clone` accepts
+# far more than remote URLs: a bare path or `file://` clones any repository on
+# the scanner host, and findings echo matched source lines back to the caller,
+# so an unrestricted value turns a scan request into a local-source read (and
+# an internal URL into an SSRF). `ext::<command>` is a command-execution
+# transport -- current Git refuses it by default, but an environment with
+# `protocol.ext.allow=always` would not.
+#
+# Default to the two transports that address a genuine remote with transport
+# security. Operators who need more (a `file://` mirror, a plaintext internal
+# host) opt in explicitly via CODEGUARD_GIT_ALLOWED_SCHEMES.
+DEFAULT_GIT_URL_SCHEMES = frozenset({"https", "ssh", "git+ssh"})
+GIT_URL_SCHEMES_ENV_VAR = "CODEGUARD_GIT_ALLOWED_SCHEMES"
+_URL_SCHEME = re.compile(r"^([A-Za-z][A-Za-z0-9+.-]*)://")
+# Git's transport-helper form, e.g. `ext::sh -c ...` or `transport::address`.
+_TRANSPORT_HELPER = re.compile(r"^([A-Za-z][A-Za-z0-9+.-]*)::")
+# scp-like shorthand, e.g. `git@github.com:owner/repo.git`. Rejects anything
+# containing a path separator before the colon so Windows paths do not match.
+_SCP_LIKE = re.compile(r"^[^/\\:]+@[^/\\:]+:")
 
 
 class CLIInputError(ValueError):
@@ -284,6 +306,10 @@ def _materialize_repo(
         return
     if not isinstance(raw_git_url, str) or not raw_git_url.strip():
         raise CLIInputError("payload.git_url must be a non-empty string")
+    # Deliberately outside the try below: a disallowed scheme is a rejected
+    # request, not a clone failure, so it must not degrade into the silent
+    # repo_path fallback.
+    _validate_git_url(raw_git_url)
 
     with tempfile.TemporaryDirectory(prefix="ai-codeguard-git-") as temp:
         destination = Path(temp) / "repository"
@@ -301,6 +327,48 @@ def _materialize_repo(
             )
             return
         yield destination.resolve(), "git", []
+
+
+def _git_url_scheme(git_url: str) -> str:
+    """Classify a git URL into the token used for allowlist checks.
+
+    Bare and relative filesystem paths report ``file`` so they are governed by
+    the same opt-in as explicit ``file://`` URLs.
+    """
+
+    candidate = git_url.strip()
+    match = _URL_SCHEME.match(candidate)
+    if match is not None:
+        return match.group(1).lower()
+    match = _TRANSPORT_HELPER.match(candidate)
+    if match is not None:
+        return match.group(1).lower()
+    if _SCP_LIKE.match(candidate):
+        return "ssh"
+    return "file"
+
+
+def _allowed_git_url_schemes() -> frozenset[str]:
+    configured = os.environ.get(GIT_URL_SCHEMES_ENV_VAR)
+    if configured is None or not configured.strip():
+        return DEFAULT_GIT_URL_SCHEMES
+    return frozenset(
+        token.strip().lower()
+        for token in configured.split(",")
+        if token.strip()
+    )
+
+
+def _validate_git_url(git_url: str) -> None:
+    scheme = _git_url_scheme(git_url)
+    allowed = _allowed_git_url_schemes()
+    if scheme in allowed:
+        return
+    raise CLIInputError(
+        f"git_url scheme {scheme!r} is not allowed; permitted schemes are "
+        f"{', '.join(sorted(allowed))}. Set {GIT_URL_SCHEMES_ENV_VAR} to a "
+        "comma-separated list to override."
+    )
 
 
 def _clone_repository(git_url: str, destination: Path) -> None:

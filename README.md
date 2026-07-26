@@ -126,6 +126,26 @@ payload 中也可直接使用 `{"git_url":"..."}`，供
 `004-taint-source-to-sink` / `004-cross-function-dataflow`（也接受
 `taint` / `dataflow` 简写）。
 
+#### `git_url` scheme 白名单
+
+`git clone` 接受的远不止远程 URL：裸路径或 `file://` 会克隆扫描主机上的
+任意仓库，而 finding 的 `evidence` 会把命中的源码行回传给调用方。因此
+`git_url` 默认只允许 **`https`、`ssh`、`git+ssh`**（含 `git@host:owner/repo`
+scp 简写）；`file://`、裸路径、`http://`、`git://`、`ext::<command>` 一律拒绝。
+
+被拒绝的 scheme 是**输入错误**，不会降级到 `repo_path` 回退——回退只针对
+clone 失败。
+
+需要放宽时用 `CODEGUARD_GIT_ALLOWED_SCHEMES` 显式声明（逗号分隔，覆盖默认值）：
+
+```bash
+# 允许本地镜像
+CODEGUARD_GIT_ALLOWED_SCHEMES=https,ssh,file \
+  python -m ai_codeguard.cli scan --git-url file:///srv/mirror/service.git --json
+```
+
+注意这是 scheme 层面的控制，不做主机白名单：`https://` 指向内网地址仍会放行。
+
 ### PR review bot (BYO-key)
 
 `--output github` produces a [GitHub PR review payload](https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request) — a summary plus one inline comment per finding (rule, CWE link, Stage 2 reasoning, suggested fix, and a copy-paste suppression hint). It carries no credentials; a thin workflow step submits it with the repo's built-in `GITHUB_TOKEN`, and you bring your own LLM key as a secret (nothing goes to a hosted service). See [`docs/examples/pr-review.yml`](docs/examples/pr-review.yml) — it scans only the PR's changed files and passes the PR diff via `--diff`, so comments land only on changed *lines* (pre-existing findings in touched files are dropped before Stage 2, costing no LLM calls), and it falls back to a Stage-1-only advisory pass when no key is set.
