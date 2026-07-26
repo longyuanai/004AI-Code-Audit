@@ -99,8 +99,9 @@ node dist/index.js rules test ./custom-rules ./src --output json
 ### IntegrationGateway：扫描本地仓库 / Git URL
 
 Python v0.6 adapter CLI 输出 shared-integration 可直接消费的 Finding
-JSON envelope。Windows 下请使用与 bundled tree-sitter binding 匹配的
-Python 3.14：
+JSON envelope。需要 **Python 3.11+**（`pyproject.toml` 声明 `^3.11`，CI 覆盖
+3.11 / 3.12）。若使用 `.python-deps/` 里预置的 tree-sitter wheel，请确保其
+ABI tag 与当前解释器一致；否则直接 `pip install` 对应版本即可：
 
 ```powershell
 $payload = '{"repo_path":"C:\\work\\service","languages":["python","go","java"]}'

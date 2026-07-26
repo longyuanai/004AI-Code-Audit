@@ -25,6 +25,10 @@ tree-sitter-typescript = "0.23.2"
 [tool.poetry.group.dev.dependencies]
 jsonschema = "^4.26.0"
 pytest = "^8.2.0"
+# Used only by tests/integration/test_code_adapter_e2e.py, which was importing
+# them without declaring them anywhere; the test skips when they are absent.
+httpx = "^0.28"
+uvicorn = "^0.34"
 
 [build-system]
 requires = ["poetry-core"]
