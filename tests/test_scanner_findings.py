@@ -89,6 +89,8 @@ def test_source_and_sink_in_the_same_function_are_reported(
     tree_sitter_binding,
     tmp_path: Path,
 ) -> None:
+    """Python is a dataflow language, so this is proven rather than guessed."""
+
     findings = _scan(
         tmp_path,
         "vuln.py",
@@ -100,7 +102,30 @@ def test_source_and_sink_in_the_same_function_are_reported(
     assert len(findings) == 1
     finding = findings[0]
     assert finding["metadata"]["line"] == 3
-    assert finding["metadata"]["scope"] == "function handler"
+    assert finding["metadata"]["analysis"] == "dataflow"
+    assert finding["metadata"]["variable"] == "name"
+    assert finding["metadata"]["scope"] == "handler"
+    assert finding["severity"] == "high"
+    assert finding["confidence"] == 0.9
+    assert "dataflow" in finding["tags"]
+
+
+def test_proven_flow_is_not_also_reported_by_the_heuristic(
+    tree_sitter_binding,
+    tmp_path: Path,
+) -> None:
+    """Both engines see this sink; only the stronger finding is kept."""
+
+    findings = _scan(
+        tmp_path,
+        "vuln.py",
+        "def handler(conn):\n"
+        "    name = input('name')\n"
+        '    return conn.execute("SELECT * FROM u WHERE n = " + name)\n',
+    )
+
+    lines = [finding["metadata"]["line"] for finding in findings]
+    assert lines == [3], "sink line 3 must be reported exactly once"
 
 
 def test_module_level_source_reaches_a_sink_inside_a_function(
@@ -143,15 +168,18 @@ def test_heuristic_findings_are_labelled_as_unproven(
     """Severity must reflect that no dataflow proof exists.
 
     These were emitted as high/0.85 regardless of evidence strength, which
-    made every hit indistinguishable from a confirmed injection.
+    made every hit indistinguishable from a confirmed injection. TypeScript
+    is used here because the dataflow engine does not cover it, so this file
+    exercises the heuristic path.
     """
 
     findings = _scan(
         tmp_path,
-        "vuln.py",
-        "def handler(conn):\n"
-        "    name = input('name')\n"
-        '    return conn.execute("SELECT * FROM u WHERE n = " + name)\n',
+        "app.ts",
+        "export function handler(req, db) {\n"
+        "  const name = req.body.name;\n"
+        '  return db.query("SELECT * FROM u WHERE n = " + name);\n'
+        "}\n",
     )
 
     finding = findings[0]
@@ -160,6 +188,68 @@ def test_heuristic_findings_are_labelled_as_unproven(
     assert "heuristic" in finding["tags"]
     assert finding["metadata"]["analysis"] == "heuristic-cooccurrence"
     assert "no dataflow proof" in finding["narrative"]
+
+
+def test_languages_without_dataflow_still_get_heuristic_coverage(
+    tree_sitter_binding,
+    tmp_path: Path,
+) -> None:
+    """C++ and TypeScript must not lose coverage to the dataflow split."""
+
+    findings = _scan(
+        tmp_path,
+        "app.ts",
+        "export function handler(req, db) {\n"
+        "  const name = req.body.name;\n"
+        '  return db.query("SELECT " + name);\n'
+        "}\n",
+    )
+
+    assert len(findings) == 1
+    assert findings[0]["metadata"]["analysis"] == "heuristic-cooccurrence"
+
+
+@pytest.mark.parametrize(
+    ("filename", "body", "variable", "sink"),
+    [
+        (
+            "app.go",
+            "package main\n"
+            "func handler(db *DB, r *Request) {\n"
+            '    name := r.FormValue("name")\n'
+            '    db.Query("SELECT " + name)\n'
+            "}\n",
+            "name",
+            "db.Query",
+        ),
+        (
+            "App.java",
+            "class App {\n"
+            "  void run(Conn c, Request req) {\n"
+            '    String n = req.getParameter("n");\n'
+            '    c.executeQuery("SELECT " + n);\n'
+            "  }\n"
+            "}\n",
+            "n",
+            "c.executeQuery",
+        ),
+    ],
+)
+def test_dataflow_covers_go_and_java(
+    tree_sitter_binding,
+    tmp_path: Path,
+    filename: str,
+    body: str,
+    variable: str,
+    sink: str,
+) -> None:
+    findings = _scan(tmp_path, filename, body)
+
+    assert len(findings) == 1
+    metadata = findings[0]["metadata"]
+    assert metadata["analysis"] == "dataflow"
+    assert metadata["variable"] == variable
+    assert sink in findings[0]["narrative"]
 
 
 @pytest.mark.parametrize(
