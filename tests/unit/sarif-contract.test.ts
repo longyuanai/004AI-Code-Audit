@@ -33,6 +33,17 @@ const contract = JSON.parse(
   readFileSync(resolve(__dirname, '../../contracts/sarif.json'), 'utf8'),
 ) as SarifContract;
 
+/** The subset of the SARIF log this suite asserts on. */
+interface SarifLogShape {
+  $schema: string;
+  version: string;
+  runs: Array<{
+    tool: {
+      driver: { name: string; version: string; informationUri: string };
+    };
+  }>;
+}
+
 function emptyResult(): ScanResult {
   return {
     findings: [],
@@ -42,8 +53,8 @@ function emptyResult(): ScanResult {
   } as unknown as ScanResult;
 }
 
-function sarifFor(result: ScanResult): Record<string, any> {
-  return JSON.parse(formatSARIF(result));
+function sarifFor(result: ScanResult): SarifLogShape {
+  return JSON.parse(formatSARIF(result)) as SarifLogShape;
 }
 
 describe('SARIF cross-stack contract', () => {
