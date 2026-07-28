@@ -12,6 +12,10 @@ function makeScanResult(findings: Finding[] = [], overrides: Partial<ScanResult>
     suspicious: findings.length,
     suppressed: 0,
     baselined: 0,
+    // Required by ScanResult. Omitting it made formatJSON emit
+    // `diffFiltered: undefined`, which JSON.stringify drops, so the JSON
+    // reporter tests asserted on output missing a key production always has.
+    diffFiltered: 0,
     findings,
     skipped: [],
     duration: 1234,
