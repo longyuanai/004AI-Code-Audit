@@ -1,0 +1,42 @@
+{
+  "description": "Cross-stack output contract for AI-CodeGuard. The TypeScript reporter (src/reporter/sarif.ts) and the Python exporter (src/ai_code_audit/output/sarif.py) both emit SARIF that is uploaded to the same GitHub Code Scanning instance, so the fields below must agree. Conformance is enforced from both sides: tests/unit/sarif-contract.test.ts and tests/test_sarif_contract.py each read this file and assert their own implementation matches it. Change a value here and both suites fail until both stacks are updated.",
+  "sarifVersion": "2.1.0",
+  "schemaUri": "https://json.schemastore.org/sarif-2.1.0.json",
+  "driver": {
+    "name": "AI-CodeGuard",
+    "informationUri": "https://github.com/longyuanai/004AI-Code-Audit"
+  },
+  "severityLevels": {
+    "critical": "error",
+    "high": "error",
+    "medium": "warning",
+    "low": "note",
+    "info": "note"
+  },
+  "securitySeverityScores": {
+    "critical": "9.0",
+    "high": "7.0",
+    "medium": "4.0",
+    "low": "2.0",
+    "info": "0.0"
+  },
+  "uriBaseId": "%SRCROOT%",
+  "fingerprintKey": "codeguardFingerprint/v1",
+  "ruleIdNamespaces": {
+    "typescript": {
+      "pattern": "^CG-[0-9]{3}$",
+      "owner": "src/rules/built-in",
+      "description": "Stage 1 built-in AST rules."
+    },
+    "python": {
+      "pattern": "^004-[a-z0-9]+(-[a-z0-9]+)*$",
+      "owner": "src/codeguard, src/ai_code_audit",
+      "description": "Phase-2 taint, dataflow and heuristic rules. The 004- prefix is this product's id in the shared-integration finding namespace."
+    }
+  },
+  "notes": {
+    "severityVocabulary": "info is Python-only; the TypeScript Severity union has no such member. Both stacks must map any severity they do emit through severityLevels.",
+    "partialFingerprints": "Emitted by the TypeScript reporter only. The key is fixed here so that if the Python exporter gains fingerprints they land under the same key rather than a second one.",
+    "driverVersion": "Deliberately absent. The npm package (ai-codeguard) and the Python package (ai-codeguard-upgrade) are separately named distributables and version independently; each stack reports its own."
+  }
+}

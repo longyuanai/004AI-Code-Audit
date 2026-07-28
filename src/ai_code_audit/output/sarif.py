@@ -6,8 +6,17 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from ai_code_audit import __version__
+
+# These values are fixed by contracts/sarif.json so that SARIF from this
+# exporter and from the TypeScript reporter (src/reporter/sarif.ts) describe
+# the same tool when uploaded to the same Code Scanning instance.
+# tests/test_sarif_contract.py enforces it.
 SARIF_SCHEMA_URL = "https://json.schemastore.org/sarif-2.1.0.json"
 SARIF_VERSION = "2.1.0"
+DRIVER_NAME = "AI-CodeGuard"
+DRIVER_INFORMATION_URI = "https://github.com/longyuanai/004AI-Code-Audit"
+URI_BASE_ID = "%SRCROOT%"
 LEVELS = {
     "critical": "error",
     "high": "error",
@@ -88,7 +97,8 @@ def finding_to_result(finding: Mapping[str, Any]) -> dict[str, Any]:
             {
                 "physicalLocation": {
                     "artifactLocation": {
-                        "uri": _artifact_uri(finding, metadata)
+                        "uri": _artifact_uri(finding, metadata),
+                        "uriBaseId": URI_BASE_ID,
                     },
                     "region": {
                         "startLine": line,
@@ -111,8 +121,14 @@ def finding_to_result(finding: Mapping[str, Any]) -> dict[str, Any]:
 def export_sarif(
     findings: Iterable[Mapping[str, Any]],
     *,
-    tool_version: str = "0.6",
+    tool_version: str | None = None,
 ) -> dict[str, Any]:
+    """Build a SARIF 2.1.0 document.
+
+    `tool_version` defaults to this package's version rather than a literal,
+    which previously read "0.6" and could not track pyproject (0.6.0).
+    """
+
     return {
         "version": SARIF_VERSION,
         "$schema": SARIF_SCHEMA_URL,
@@ -120,11 +136,9 @@ def export_sarif(
             {
                 "tool": {
                     "driver": {
-                        "name": "longyuanai-codeguard",
-                        "version": tool_version,
-                        "informationUri": (
-                            "https://github.com/hzj-Jeff-07/AI-CodeGuard"
-                        ),
+                        "name": DRIVER_NAME,
+                        "version": tool_version or __version__,
+                        "informationUri": DRIVER_INFORMATION_URI,
                     }
                 },
                 "results": [finding_to_result(item) for item in findings],

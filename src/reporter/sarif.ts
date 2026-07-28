@@ -85,14 +85,16 @@ export function formatSARIF(result: ScanResult): string {
   }
 
   const sarifLog: SarifLog = {
-    $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json',
+    // These three values are fixed by contracts/sarif.json, which the Python
+    // exporter follows too; tests/unit/sarif-contract.test.ts enforces it.
+    $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
     version: '2.1.0',
     runs: [{
       tool: {
         driver: {
           name: 'AI-CodeGuard',
           version: VERSION,
-          informationUri: 'https://github.com/hzj-Jeff-07/AI-CodeGuard',
+          informationUri: 'https://github.com/longyuanai/004AI-Code-Audit',
           rules: Array.from(ruleMap.entries()).map(([id, f]) => {
             const cwe = cweForRule(id);
             const descriptor: SarifRuleDescriptor = {

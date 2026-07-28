@@ -165,7 +165,9 @@ describe('formatSARIF', () => {
   it('has correct SARIF schema and version', () => {
     const result = makeScanResult([makeFinding()]);
     const sarif = JSON.parse(formatSARIF(result));
-    expect(sarif.$schema).toContain('sarif-schema-2.1.0');
+    // Schema URI is fixed by contracts/sarif.json (shared with the Python
+    // exporter); sarif-contract.test.ts asserts the exact value.
+    expect(sarif.$schema).toContain('sarif-2.1.0');
     expect(sarif.version).toBe('2.1.0');
   });
 
