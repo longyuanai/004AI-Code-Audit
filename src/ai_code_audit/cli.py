@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Sequence
@@ -13,7 +14,8 @@ from ai_code_audit.output import (
     render_envelope,
     render_sarif,
 )
-from ai_code_audit.gitutils import GitDiffError
+from ai_code_audit.backends import BackendError, ScanRequest, scan_with_backend
+from ai_code_audit.gitutils import GitDiffError, collect_diff
 from ai_code_audit.scanner import scan_diff, scan_repository
 from ai_codeguard.cli import (
     CLIInputError,
@@ -29,6 +31,7 @@ def scan_payload(payload: dict[str, Any]) -> dict[str, object]:
         or not all(isinstance(item, str) for item in languages)
     ):
         raise CLIInputError("payload.languages must be a list of strings")
+    backend = _backend_input(payload)
     diff = _diff_input(payload)
     with _materialize_repo(payload) as (
         repo_path,
@@ -36,17 +39,50 @@ def scan_payload(payload: dict[str, Any]) -> dict[str, object]:
         acquisition_warnings,
     ):
         try:
-            envelope = (
-                scan_diff(
-                    repo_path,
-                    diff["base"],
-                    diff["head"],
-                    languages,
+            if backend == "builtin":
+                envelope = (
+                    scan_diff(
+                        repo_path,
+                        diff["base"],
+                        diff["head"],
+                        languages,
+                    )
+                    if diff is not None
+                    else scan_repository(repo_path, languages)
                 )
-                if diff is not None
-                else scan_repository(repo_path, languages)
-            )
-        except (GitDiffError, KeyError, ValueError) as error:
+            else:
+                diff_scope = (
+                    collect_diff(repo_path, diff["base"], diff["head"])
+                    if diff is not None
+                    else None
+                )
+                request = ScanRequest.create(
+                    repo_path,
+                    languages,
+                    include_files=(
+                        diff_scope.files if diff_scope is not None else None
+                    ),
+                    line_ranges=(
+                        diff_scope.line_ranges
+                        if diff_scope is not None
+                        else None
+                    ),
+                )
+                envelope = scan_with_backend(
+                    request,
+                    backend=backend,
+                    opengrep_path=os.environ.get("CODEGUARD_OPENGREP_PATH"),
+                    rules_path=os.environ.get("CODEGUARD_OPENGREP_RULES"),
+                    timeout=_backend_timeout(),
+                )
+                if diff is not None and diff_scope is not None:
+                    envelope["summary"]["repository_source"] = "git-diff"
+                    envelope["summary"]["diff"] = {
+                        "base": diff["base"],
+                        "head": diff["head"],
+                        "files": list(diff_scope.files),
+                    }
+        except (BackendError, GitDiffError, KeyError, ValueError) as error:
             raise CLIInputError(str(error)) from error
         if diff is None:
             envelope["summary"]["repository_source"] = repository_source
@@ -55,6 +91,33 @@ def scan_payload(payload: dict[str, Any]) -> dict[str, object]:
             *envelope["warnings"],
         ]
         return envelope
+
+
+def _backend_input(payload: dict[str, Any]) -> str:
+    raw = payload.get("backend", "builtin")
+    if not isinstance(raw, str):
+        raise CLIInputError("payload.backend must be a string")
+    backend = raw.lower()
+    if backend not in {"auto", "builtin", "opengrep"}:
+        raise CLIInputError(
+            "payload.backend must be auto, builtin, or opengrep"
+        )
+    return backend
+
+
+def _backend_timeout() -> float:
+    raw = os.environ.get("CODEGUARD_BACKEND_TIMEOUT", "120")
+    try:
+        timeout = float(raw)
+    except ValueError as error:
+        raise CLIInputError(
+            "CODEGUARD_BACKEND_TIMEOUT must be a number"
+        ) from error
+    if timeout <= 0:
+        raise CLIInputError(
+            "CODEGUARD_BACKEND_TIMEOUT must be greater than zero"
+        )
+    return timeout
 
 
 def _diff_input(payload: dict[str, Any]) -> dict[str, str] | None:

@@ -126,6 +126,35 @@ payload 中也可直接使用 `{"git_url":"..."}`，供
 `004-taint-source-to-sink` / `004-cross-function-dataflow`（也接受
 `taint` / `dataflow` 简写）。
 
+### 可插拔静态分析后端
+
+`ai_code_audit` 的 v0.6 CLI 支持 `builtin`、`auto` 和 `opengrep`
+后端。为保持冻结契约和现有安装兼容，未指定 `backend` 时仍使用
+`builtin`；`auto` 在 Opengrep 未配置时会带 warning 降级。
+
+外部可执行文件和规则目录只能由受信任的进程环境配置，payload
+不能指定任意程序路径：
+
+```powershell
+$env:PYTHONPATH = "src;$((Resolve-Path '.python-deps').Path)"
+$env:CODEGUARD_OPENGREP_PATH = "C:\tools\opengrep\opengrep.exe"
+$env:CODEGUARD_OPENGREP_RULES = "C:\work\codeguard-rules"
+$env:CODEGUARD_BACKEND_TIMEOUT = "120"
+
+$payload = @{
+  repo_path = "C:\work\service"
+  backend = "opengrep"
+} | ConvertTo-Json -Compress
+
+$payload |
+  python -m ai_code_audit scan --json
+```
+
+Opengrep 以参数数组和 `shell=False` 启动，并统一处理 UTF-8、超时、
+退出码、Windows 路径和 rule ID。结果继续输出 `source="004"` 的
+v0.5 §15 envelope。Phase 0 选型数据见
+[`docs/phase0-benchmark-report.md`](docs/phase0-benchmark-report.md)。
+
 ### PR review bot (BYO-key)
 
 `--output github` produces a [GitHub PR review payload](https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request) — a summary plus one inline comment per finding (rule, CWE link, Stage 2 reasoning, suggested fix, and a copy-paste suppression hint). It carries no credentials; a thin workflow step submits it with the repo's built-in `GITHUB_TOKEN`, and you bring your own LLM key as a secret (nothing goes to a hosted service). See [`docs/examples/pr-review.yml`](docs/examples/pr-review.yml) — it scans only the PR's changed files and passes the PR diff via `--diff`, so comments land only on changed *lines* (pre-existing findings in touched files are dropped before Stage 2, costing no LLM calls), and it falls back to a Stage-1-only advisory pass when no key is set.
