@@ -1,0 +1,58 @@
+rules:
+  - id: phase0-python-untrusted-code
+    mode: taint
+    languages: [python]
+    message: Untrusted Python input reaches dynamic code execution.
+    severity: ERROR
+    pattern-sources:
+      - pattern: input(...)
+      - pattern: os.getenv(...)
+    pattern-sinks:
+      - pattern: eval(...)
+
+  - id: phase0-cpp-untrusted-command
+    mode: taint
+    languages: [cpp]
+    message: Untrusted C++ input reaches command execution.
+    severity: ERROR
+    pattern-sources:
+      - patterns:
+          - pattern: std::cin >> $VALUE
+          - focus-metavariable: $VALUE
+        by-side-effect: true
+      - pattern: std::getenv(...)
+    pattern-sinks:
+      - pattern: system(...)
+
+  - id: phase0-java-untrusted-command
+    mode: taint
+    languages: [java]
+    message: Untrusted Java input reaches command execution.
+    severity: ERROR
+    pattern-sources:
+      - pattern: $REQUEST.getParameter(...)
+      - pattern: System.getenv(...)
+    pattern-sinks:
+      - pattern: Runtime.getRuntime().exec(...)
+
+  - id: phase0-go-untrusted-command
+    mode: taint
+    languages: [go]
+    message: Untrusted Go input reaches command execution.
+    severity: ERROR
+    pattern-sources:
+      - pattern: $REQUEST.FormValue(...)
+      - pattern: os.Getenv(...)
+    pattern-sinks:
+      - pattern: exec.Command(...)
+
+  - id: phase0-typescript-untrusted-code
+    mode: taint
+    languages: [typescript]
+    message: Untrusted TypeScript input reaches dynamic code execution.
+    severity: ERROR
+    pattern-sources:
+      - pattern: $REQUEST.query.$FIELD
+      - pattern: process.env.$NAME
+    pattern-sinks:
+      - pattern: eval(...)
