@@ -70,6 +70,31 @@ def test_opengrep_maps_json_to_frozen_envelope(
                                     "language": "python",
                                 },
                                 "lines": "eval(value)",
+                                "dataflow_trace": {
+                                    "taint_source": [
+                                        "CliLoc",
+                                        [
+                                            {
+                                                "path": str(source),
+                                                "start": {"line": 1, "col": 6},
+                                                "end": {"line": 1, "col": 11},
+                                            },
+                                            "value",
+                                        ],
+                                    ],
+                                    "intermediate_vars": [],
+                                    "taint_sink": [
+                                        "CliLoc",
+                                        [
+                                            {
+                                                "path": str(source),
+                                                "start": {"line": 1, "col": 1},
+                                                "end": {"line": 1, "col": 12},
+                                            },
+                                            "eval(value)",
+                                        ],
+                                    ],
+                                },
                             },
                         }
                     ],
@@ -98,6 +123,11 @@ def test_opengrep_maps_json_to_frozen_envelope(
     assert finding["confidence"] == 0.95
     assert finding["metadata"]["rule_id"] == "CG-PY-001"
     assert finding["metadata"]["relative_path"] == "app.py"
+    assert len(finding["metadata"]["fingerprint"]) == 16
+    assert [step["kind"] for step in finding["metadata"]["code_flows"]] == [
+        "source",
+        "sink",
+    ]
 
 
 def test_opengrep_invalid_json_is_backend_output_error(

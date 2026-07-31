@@ -35,8 +35,8 @@ def scan_with_backend(
     if normalized == "opengrep":
         if external is None or not external.available():
             raise BackendUnavailableError(
-                "backend=opengrep requires CODEGUARD_OPENGREP_PATH and "
-                "CODEGUARD_OPENGREP_RULES"
+                "backend=opengrep requires CODEGUARD_OPENGREP_PATH or an "
+                "opengrep executable on PATH, plus a readable rules path"
             )
         return external.scan(request)
     if normalized != "auto":

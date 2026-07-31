@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Sequence
@@ -14,6 +15,7 @@ from ai_code_audit.output import (
     render_envelope,
     render_sarif,
 )
+from ai_code_audit.postprocess import BaselineError, postprocess_envelope
 from ai_code_audit.backends import BackendError, ScanRequest, scan_with_backend
 from ai_code_audit.gitutils import GitDiffError, collect_diff
 from ai_code_audit.scanner import scan_diff, scan_repository
@@ -22,6 +24,9 @@ from ai_codeguard.cli import (
     _materialize_repo,
     _payload_from_args,
 )
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_OPENGREP_RULES = PROJECT_ROOT / "rules" / "opengrep"
 
 
 def scan_payload(payload: dict[str, Any]) -> dict[str, object]:
@@ -71,8 +76,11 @@ def scan_payload(payload: dict[str, Any]) -> dict[str, object]:
                 envelope = scan_with_backend(
                     request,
                     backend=backend,
-                    opengrep_path=os.environ.get("CODEGUARD_OPENGREP_PATH"),
-                    rules_path=os.environ.get("CODEGUARD_OPENGREP_RULES"),
+                    opengrep_path=_opengrep_path(),
+                    rules_path=os.environ.get(
+                        "CODEGUARD_OPENGREP_RULES",
+                        str(DEFAULT_OPENGREP_RULES),
+                    ),
                     timeout=_backend_timeout(),
                 )
                 if diff is not None and diff_scope is not None:
@@ -82,7 +90,13 @@ def scan_payload(payload: dict[str, Any]) -> dict[str, object]:
                         "head": diff["head"],
                         "files": list(diff_scope.files),
                     }
-        except (BackendError, GitDiffError, KeyError, ValueError) as error:
+        except (
+            BackendError,
+            BaselineError,
+            GitDiffError,
+            KeyError,
+            ValueError,
+        ) as error:
             raise CLIInputError(str(error)) from error
         if diff is None:
             envelope["summary"]["repository_source"] = repository_source
@@ -90,7 +104,14 @@ def scan_payload(payload: dict[str, Any]) -> dict[str, object]:
             *acquisition_warnings,
             *envelope["warnings"],
         ]
-        return envelope
+        try:
+            return postprocess_envelope(
+                envelope,
+                repo_path=repo_path,
+                baseline_path=_baseline_input(payload),
+            )
+        except BaselineError as error:
+            raise CLIInputError(str(error)) from error
 
 
 def _backend_input(payload: dict[str, Any]) -> str:
@@ -118,6 +139,19 @@ def _backend_timeout() -> float:
             "CODEGUARD_BACKEND_TIMEOUT must be greater than zero"
         )
     return timeout
+
+
+def _opengrep_path() -> str | None:
+    return os.environ.get("CODEGUARD_OPENGREP_PATH") or shutil.which("opengrep")
+
+
+def _baseline_input(payload: dict[str, Any]) -> str | None:
+    raw = payload.get("baseline_path")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw:
+        raise CLIInputError("payload.baseline_path must be a non-empty string")
+    return raw
 
 
 def _diff_input(payload: dict[str, Any]) -> dict[str, str] | None:

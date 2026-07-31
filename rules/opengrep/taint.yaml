@@ -1,0 +1,83 @@
+rules:
+  - id: CG-OG-PY-001
+    mode: taint
+    languages: [python]
+    message: Untrusted Python input reaches dynamic code execution.
+    severity: ERROR
+    metadata:
+      cwe: CWE-95
+      confidence: 0.92
+      language: python
+      category: code-injection
+    pattern-sources:
+      - pattern: input(...)
+      - pattern: os.getenv(...)
+    pattern-sinks:
+      - pattern: eval(...)
+
+  - id: CG-OG-CPP-001
+    mode: taint
+    languages: [cpp]
+    message: Untrusted C++ input reaches command execution.
+    severity: ERROR
+    metadata:
+      cwe: CWE-78
+      confidence: 0.92
+      language: cpp
+      category: command-injection
+    pattern-sources:
+      - patterns:
+          - pattern: std::cin >> $VALUE
+          - focus-metavariable: $VALUE
+        by-side-effect: true
+      - pattern: std::getenv(...)
+    pattern-sinks:
+      - pattern: system(...)
+
+  - id: CG-OG-JAVA-001
+    mode: taint
+    languages: [java]
+    message: Untrusted Java input reaches command execution.
+    severity: ERROR
+    metadata:
+      cwe: CWE-78
+      confidence: 0.92
+      language: java
+      category: command-injection
+    pattern-sources:
+      - pattern: $REQUEST.getParameter(...)
+      - pattern: System.getenv(...)
+    pattern-sinks:
+      - pattern: Runtime.getRuntime().exec(...)
+
+  - id: CG-OG-GO-001
+    mode: taint
+    languages: [go]
+    message: Untrusted Go input reaches command execution.
+    severity: ERROR
+    metadata:
+      cwe: CWE-78
+      confidence: 0.92
+      language: go
+      category: command-injection
+    pattern-sources:
+      - pattern: $REQUEST.FormValue(...)
+      - pattern: os.Getenv(...)
+    pattern-sinks:
+      - pattern: exec.Command(...)
+
+  - id: CG-OG-TS-001
+    mode: taint
+    languages: [typescript]
+    message: Untrusted TypeScript input reaches dynamic code execution.
+    severity: ERROR
+    metadata:
+      cwe: CWE-95
+      confidence: 0.92
+      language: typescript
+      category: code-injection
+    pattern-sources:
+      - pattern: $REQUEST.query.$FIELD
+      - pattern: process.env.$NAME
+    pattern-sinks:
+      - pattern: eval(...)

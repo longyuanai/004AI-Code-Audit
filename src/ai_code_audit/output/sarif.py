@@ -76,7 +76,7 @@ def finding_to_result(finding: Mapping[str, Any]) -> dict[str, Any]:
         or finding.get("title")
         or "CodeGuard finding"
     )
-    return {
+    result = {
         "ruleId": str(
             metadata.get("rule_id")
             or finding.get("id")
@@ -106,6 +106,15 @@ def finding_to_result(finding: Mapping[str, Any]) -> dict[str, Any]:
             "longyuanai:finding-id": str(finding.get("id", "")),
         },
     }
+    fingerprint = metadata.get("fingerprint")
+    if isinstance(fingerprint, str) and fingerprint:
+        result["partialFingerprints"] = {
+            "codeguardFingerprint/v1": fingerprint
+        }
+    code_flows = _sarif_code_flows(metadata.get("code_flows"))
+    if code_flows:
+        result["codeFlows"] = code_flows
+    return result
 
 
 def export_sarif(
@@ -158,6 +167,48 @@ def _artifact_uri(
 
 def _positive_int(value: Any, *, default: int) -> int:
     return value if isinstance(value, int) and value > 0 else default
+
+
+def _sarif_code_flows(raw_steps: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw_steps, list):
+        return []
+    locations: list[dict[str, Any]] = []
+    for step in raw_steps:
+        if not isinstance(step, Mapping):
+            continue
+        path = step.get("path")
+        if not isinstance(path, str) or not path:
+            continue
+        line = _positive_int(step.get("line"), default=1)
+        column = _positive_int(step.get("column"), default=1)
+        end_line = _positive_int(step.get("end_line"), default=line)
+        end_column = _positive_int(
+            step.get("end_column"),
+            default=column,
+        )
+        locations.append(
+            {
+                "location": {
+                    "message": {
+                        "text": str(step.get("message") or step.get("kind") or "")
+                    },
+                    "physicalLocation": {
+                        "artifactLocation": {
+                            "uri": path.replace("\\", "/")
+                        },
+                        "region": {
+                            "startLine": line,
+                            "startColumn": column,
+                            "endLine": end_line,
+                            "endColumn": end_column,
+                        },
+                    },
+                }
+            }
+        )
+    if not locations:
+        return []
+    return [{"threadFlows": [{"locations": locations}]}]
 
 
 __all__ = [

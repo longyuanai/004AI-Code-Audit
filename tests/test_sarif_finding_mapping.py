@@ -50,3 +50,47 @@ def test_mapping_uses_safe_defaults() -> None:
     assert result["level"] == "warning"
     assert result["properties"]["confidence"] == 0.5
     assert region["startLine"] == 1
+
+
+def test_mapping_emits_fingerprint_and_code_flows() -> None:
+    result = finding_to_result(
+        {
+            "id": "code-og-001",
+            "severity": "high",
+            "metadata": {
+                "rule_id": "CG-OG-PY-001",
+                "relative_path": "app.py",
+                "line": 8,
+                "fingerprint": "0123456789abcdef",
+                "code_flows": [
+                    {
+                        "kind": "source",
+                        "path": "app.py",
+                        "line": 7,
+                        "column": 13,
+                        "message": "request input",
+                    },
+                    {
+                        "kind": "sink",
+                        "path": "app.py",
+                        "line": 8,
+                        "column": 5,
+                        "message": "eval(value)",
+                    },
+                ],
+            },
+        }
+    )
+
+    assert result["partialFingerprints"] == {
+        "codeguardFingerprint/v1": "0123456789abcdef"
+    }
+    locations = result["codeFlows"][0]["threadFlows"][0]["locations"]
+    assert [item["location"]["message"]["text"] for item in locations] == [
+        "request input",
+        "eval(value)",
+    ]
+    assert (
+        locations[1]["location"]["physicalLocation"]["region"]["startLine"]
+        == 8
+    )
