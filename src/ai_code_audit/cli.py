@@ -17,7 +17,11 @@ from ai_code_audit.output import (
     render_envelope,
     render_sarif,
 )
-from ai_code_audit.postprocess import BaselineError, postprocess_envelope
+from ai_code_audit.postprocess import (
+    BaselineError,
+    postprocess_envelope,
+    write_baseline,
+)
 from ai_code_audit.backends import BackendError, ScanRequest, scan_with_backend
 from ai_code_audit.gitutils import GitDiffError, collect_diff
 from ai_code_audit.scanner import scan_diff, scan_repository
@@ -47,6 +51,12 @@ def scan_payload(
     backend = _backend_input(payload)
     mode = _mode_input(payload)
     diff = _diff_input(payload)
+    baseline_input = _baseline_input(payload)
+    baseline_output = _baseline_output(payload)
+    if baseline_input is not None and baseline_output is not None:
+        raise CLIInputError(
+            "payload.baseline_path and payload.write_baseline are mutually exclusive"
+        )
     with _materialize_repo(payload) as (
         repo_path,
         repository_source,
@@ -117,11 +127,24 @@ def scan_payload(
             envelope = postprocess_envelope(
                 envelope,
                 repo_path=repo_path,
-                baseline_path=_baseline_input(payload),
+                baseline_path=baseline_input,
             )
         except BaselineError as error:
             raise CLIInputError(str(error)) from error
         envelope["summary"]["mode"] = mode
+        if baseline_output is not None:
+            try:
+                written = write_baseline(
+                    baseline_output,
+                    envelope["findings"],
+                    repo_path=repo_path,
+                )
+            except BaselineError as error:
+                raise CLIInputError(str(error)) from error
+            envelope["summary"]["baseline_written"] = {
+                "path": str(written),
+                "findings": len(envelope["findings"]),
+            }
         if mode == "hybrid":
             triage_envelope(envelope, repo_path=repo_path, router=router)
         return envelope
@@ -319,6 +342,15 @@ def _baseline_input(payload: dict[str, Any]) -> str | None:
         return None
     if not isinstance(raw, str) or not raw:
         raise CLIInputError("payload.baseline_path must be a non-empty string")
+    return raw
+
+
+def _baseline_output(payload: dict[str, Any]) -> str | None:
+    raw = payload.get("write_baseline")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw:
+        raise CLIInputError("payload.write_baseline must be a non-empty string")
     return raw
 
 

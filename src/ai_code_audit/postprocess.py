@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -224,6 +226,66 @@ def load_baseline(
     return dict(fingerprints)
 
 
+def build_baseline(
+    findings: Iterable[Mapping[str, Any]],
+) -> dict[str, object]:
+    """Create a secret-free, count-aware baseline document."""
+
+    fingerprints: dict[str, int] = {}
+    for finding in findings:
+        fingerprint = fingerprint_finding(finding)
+        fingerprints[fingerprint] = fingerprints.get(fingerprint, 0) + 1
+    return {
+        "version": BASELINE_VERSION,
+        "fingerprints": dict(sorted(fingerprints.items())),
+    }
+
+
+def write_baseline(
+    baseline_path: str | Path,
+    findings: Iterable[Mapping[str, Any]],
+    *,
+    repo_path: Path,
+) -> Path:
+    """Atomically write a baseline within the scanned repository."""
+
+    root = repo_path.resolve()
+    candidate = Path(baseline_path).expanduser()
+    path = (
+        candidate.resolve()
+        if candidate.is_absolute()
+        else (root / candidate).resolve()
+    )
+    try:
+        path.relative_to(root)
+    except ValueError as error:
+        raise BaselineError("baseline_path must stay inside repo_path") from error
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document = build_baseline(findings)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="\n",
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=path.parent,
+            delete=False,
+        ) as stream:
+            temporary_path = Path(stream.name)
+            json.dump(document, stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_path, path)
+    except OSError as error:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+        raise BaselineError(f"unable to write baseline: {error}") from error
+    return path
+
+
 def filter_against_baseline(
     findings: Iterable[dict[str, Any]],
     baseline: Mapping[str, int],
@@ -421,6 +483,7 @@ def _integer(value: Any, default: int) -> int:
 __all__ = [
     "BASELINE_VERSION",
     "BaselineError",
+    "build_baseline",
     "deduplicate_findings",
     "enrich_findings",
     "filter_against_baseline",
@@ -428,4 +491,5 @@ __all__ = [
     "fingerprint_finding",
     "load_baseline",
     "postprocess_envelope",
+    "write_baseline",
 ]
