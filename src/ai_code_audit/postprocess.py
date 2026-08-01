@@ -8,7 +8,17 @@ import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from ai_code_audit.classification import (
+    CodeContext,
+    DataClassification,
+    DataClassifier,
+    DefaultDataClassifier,
+)
+from ai_code_audit.risk import RiskConfig, assess_risk
+
 BASELINE_VERSION = 1
+CONTEXT_RADIUS = 3
+MAX_CONTEXT_FILE_BYTES = 2 * 1024 * 1024
 RULE_TOKEN = r"(?:CG-[A-Za-z0-9-]+|004-[A-Za-z0-9-]+)"
 RULE_LIST = rf"(?:\s+({RULE_TOKEN}(?:[\s,]+{RULE_TOKEN})*))?"
 SAME_LINE = re.compile(rf"codeguard-ignore(?!-next-line){RULE_LIST}")
@@ -48,6 +58,8 @@ def postprocess_envelope(
     *,
     repo_path: Path,
     baseline_path: str | Path | None = None,
+    classifier: DataClassifier | None = None,
+    risk_config: RiskConfig | None = None,
 ) -> dict[str, object]:
     raw_findings = envelope.get("findings", [])
     if not isinstance(raw_findings, list):
@@ -61,13 +73,64 @@ def postprocess_envelope(
     if baseline_path is not None:
         baseline = load_baseline(baseline_path, repo_path=repo_path)
         findings, baselined = filter_against_baseline(findings, baseline)
+    findings = enrich_findings(
+        findings,
+        repo_path=repo_path,
+        classifier=classifier or DefaultDataClassifier(),
+        in_diff=_is_diff_scan(envelope),
+        risk_config=risk_config,
+    )
     envelope["findings"] = findings
     summary = envelope.get("summary")
     if isinstance(summary, dict):
         summary["duplicates_removed"] = duplicates
         summary["suppressed"] = suppressed
         summary["baselined"] = baselined
+        summary["sensitive_findings"] = sum(
+            bool(_metadata(finding).get("data_classifications"))
+            for finding in findings
+        )
+        summary["risk_levels"] = _risk_level_counts(findings)
     return envelope
+
+
+def enrich_findings(
+    findings: Iterable[dict[str, Any]],
+    *,
+    repo_path: Path,
+    classifier: DataClassifier,
+    in_diff: bool,
+    risk_config: RiskConfig | None = None,
+) -> list[dict[str, Any]]:
+    """Attach sensitive-data and risk metadata, then rank highest risk first."""
+
+    enriched: list[dict[str, Any]] = []
+    root = repo_path.resolve()
+    for finding in findings:
+        metadata = _metadata(finding)
+        context = _classification_context(finding, metadata, root)
+        classifications = classifier.classify(context) if context else []
+        metadata["data_classifications"] = [
+            _classification_metadata(item) for item in classifications
+        ]
+        finding["tags"] = _classification_tags(
+            finding.get("tags"), classifications
+        )
+        assessment = assess_risk(
+            finding,
+            classifications,
+            reachable=_is_reachable(metadata),
+            in_diff=True if in_diff else None,
+            config=risk_config,
+        )
+        metadata["risk"] = assessment.to_metadata()
+        enriched.append(finding)
+    return sorted(
+        enriched,
+        key=lambda finding: -float(
+            _metadata(finding)["risk"]["score"]  # type: ignore[index]
+        ),
+    )
 
 
 def deduplicate_findings(
@@ -208,6 +271,120 @@ def _finding_path(
     return path if path.is_file() else None
 
 
+def _classification_context(
+    finding: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+    root: Path,
+) -> CodeContext | None:
+    path = _finding_path(finding, metadata, root)
+    if path is None:
+        return None
+    try:
+        if path.stat().st_size > MAX_CONTEXT_FILE_BYTES:
+            return None
+        lines = path.read_text(
+            encoding="utf-8", errors="replace"
+        ).splitlines()
+    except OSError:
+        return None
+    selected_lines = _context_lines(lines, metadata)
+    trace_messages = _trace_messages(metadata.get("code_flows"))
+    content = "\n".join([*selected_lines, *trace_messages])
+    return CodeContext(
+        path=str(metadata.get("relative_path") or path.name),
+        language=str(metadata.get("language") or "unknown"),
+        content=content,
+    )
+
+
+def _context_lines(
+    lines: list[str],
+    metadata: Mapping[str, Any],
+) -> list[str]:
+    line_numbers = {_integer(metadata.get("line"), 1)}
+    raw_flows = metadata.get("code_flows")
+    if isinstance(raw_flows, list):
+        relative_path = str(metadata.get("relative_path") or "").replace(
+            "\\", "/"
+        )
+        for step in raw_flows:
+            if not isinstance(step, Mapping):
+                continue
+            step_path = str(step.get("path") or "").replace("\\", "/")
+            if not step_path or step_path == relative_path:
+                line_numbers.add(_integer(step.get("line"), 1))
+    indexes: set[int] = set()
+    for line_number in line_numbers:
+        start = max(line_number - CONTEXT_RADIUS - 1, 0)
+        end = min(line_number + CONTEXT_RADIUS, len(lines))
+        indexes.update(range(start, end))
+    return [lines[index] for index in sorted(indexes)]
+
+
+def _trace_messages(raw_flows: Any) -> list[str]:
+    if not isinstance(raw_flows, list):
+        return []
+    return [
+        str(step["message"])
+        for step in raw_flows
+        if isinstance(step, Mapping)
+        and isinstance(step.get("message"), str)
+    ]
+
+
+def _classification_metadata(
+    classification: DataClassification,
+) -> dict[str, object]:
+    return {
+        "category": classification.category,
+        "confidence": classification.confidence,
+        "sensitivity_weight": classification.sensitivity_weight,
+        "indicators": list(classification.indicators),
+    }
+
+
+def _classification_tags(
+    raw_tags: Any,
+    classifications: Iterable[DataClassification],
+) -> list[str]:
+    tags = {
+        str(tag)
+        for tag in raw_tags
+        if isinstance(tag, str)
+    } if isinstance(raw_tags, list) else set()
+    tags.update(f"data:{item.category}" for item in classifications)
+    return sorted(tags)
+
+
+def _is_reachable(metadata: Mapping[str, Any]) -> bool | None:
+    flows = metadata.get("code_flows")
+    if isinstance(flows, list) and flows:
+        return True
+    if metadata.get("rule_id") == "004-phase2-taint":
+        return True
+    return None
+
+
+def _is_diff_scan(envelope: Mapping[str, object]) -> bool:
+    summary = envelope.get("summary")
+    return isinstance(summary, Mapping) and (
+        summary.get("repository_source") == "git-diff"
+        or isinstance(summary.get("diff"), Mapping)
+    )
+
+
+def _risk_level_counts(
+    findings: Iterable[Mapping[str, Any]],
+) -> dict[str, int]:
+    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for finding in findings:
+        risk = _metadata(finding).get("risk")
+        level = risk.get("level") if isinstance(risk, Mapping) else None
+        if isinstance(level, str) and level in counts:
+            counts[level] += 1
+    return counts
+
+
 def _suppression(
     lines: list[str],
     line_number: int,
@@ -245,6 +422,7 @@ __all__ = [
     "BASELINE_VERSION",
     "BaselineError",
     "deduplicate_findings",
+    "enrich_findings",
     "filter_against_baseline",
     "filter_suppressed",
     "fingerprint_finding",
