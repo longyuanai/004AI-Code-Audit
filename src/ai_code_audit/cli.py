@@ -8,7 +8,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from shared_llm_core import LLMRouter
 
@@ -35,6 +35,13 @@ from ai_codeguard.cli import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OPENGREP_RULES = PROJECT_ROOT / "rules" / "opengrep"
+SEVERITY_RANK = {
+    "info": 0,
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+    "critical": 4,
+}
 
 
 def scan_payload(
@@ -50,6 +57,7 @@ def scan_payload(
         raise CLIInputError("payload.languages must be a list of strings")
     backend = _backend_input(payload)
     mode = _mode_input(payload)
+    fail_on = _fail_on_input(payload)
     diff = _diff_input(payload)
     baseline_input = _baseline_input(payload)
     baseline_output = _baseline_output(payload)
@@ -147,6 +155,7 @@ def scan_payload(
             }
         if mode == "hybrid":
             triage_envelope(envelope, repo_path=repo_path, router=router)
+        _apply_gate(envelope, fail_on)
         return envelope
 
 
@@ -250,6 +259,48 @@ def _mode_input(payload: dict[str, Any]) -> str:
     if mode not in {"fast", "hybrid"}:
         raise CLIInputError("payload.mode must be fast or hybrid")
     return mode
+
+
+def _fail_on_input(payload: dict[str, Any]) -> str:
+    raw = payload.get("fail_on", "none")
+    if not isinstance(raw, str):
+        raise CLIInputError("payload.fail_on must be a string")
+    threshold = raw.lower()
+    if threshold not in {"none", "any", *SEVERITY_RANK}:
+        raise CLIInputError(
+            "payload.fail_on must be none, any, info, low, medium, high, or critical"
+        )
+    return threshold
+
+
+def _apply_gate(envelope: dict[str, object], threshold: str) -> None:
+    if threshold == "none":
+        return
+    findings = envelope.get("findings")
+    findings = findings if isinstance(findings, list) else []
+    blocking = [
+        finding
+        for finding in findings
+        if isinstance(finding, dict) and _blocks_gate(finding, threshold)
+    ]
+    summary = envelope.get("summary")
+    if not isinstance(summary, dict):
+        summary = {}
+        envelope["summary"] = summary
+    summary["gate"] = {
+        "threshold": threshold,
+        "triggered": bool(blocking),
+        "findings": len(blocking),
+    }
+
+
+def _blocks_gate(finding: Mapping[str, Any], threshold: str) -> bool:
+    if threshold == "any":
+        return True
+    severity = str(finding.get("severity") or "medium").lower()
+    return SEVERITY_RANK.get(severity, SEVERITY_RANK["medium"]) >= (
+        SEVERITY_RANK[threshold]
+    )
 
 
 def _should_triage(finding: dict[str, Any]) -> bool:
@@ -381,6 +432,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-file")
     parser.add_argument("--repo-path")
     parser.add_argument("--git-url")
+    parser.add_argument(
+        "--fail-on",
+        choices=("none", "any", "info", "low", "medium", "high", "critical"),
+    )
     return parser
 
 
@@ -397,6 +452,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             repo_path=args.repo_path,
             git_url=args.git_url,
         )
+        if args.fail_on is not None:
+            payload["fail_on"] = args.fail_on
         envelope = scan_payload(payload)
     except (CLIInputError, json.JSONDecodeError) as error:
         return _input_error(str(error), args.json)
@@ -407,7 +464,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(render_sarif(document), encoding="utf-8")
         print(str(output_path))
-        return 0
+        return _gate_exit_code(envelope)
     if args.json:
         print(render_envelope(envelope))
     else:
@@ -416,7 +473,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"Scanned {summary['files_scanned']} files; "
             f"found {len(envelope['findings'])} issue(s)."
         )
-    return 0
+    return _gate_exit_code(envelope)
+
+
+def _gate_exit_code(envelope: Mapping[str, object]) -> int:
+    summary = envelope.get("summary")
+    gate = summary.get("gate") if isinstance(summary, Mapping) else None
+    return 1 if isinstance(gate, Mapping) and gate.get("triggered") is True else 0
 
 
 def _input_error(message: str, json_output: bool) -> int:
