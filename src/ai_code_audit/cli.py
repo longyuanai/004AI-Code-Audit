@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
+from shared_llm_core import LLMRouter
+
 from ai_code_audit.output import (
     export_sarif,
     render_envelope,
@@ -19,6 +21,8 @@ from ai_code_audit.postprocess import BaselineError, postprocess_envelope
 from ai_code_audit.backends import BackendError, ScanRequest, scan_with_backend
 from ai_code_audit.gitutils import GitDiffError, collect_diff
 from ai_code_audit.scanner import scan_diff, scan_repository
+from ai_code_audit.triage import FindingTriageReviewer, RouterLike
+from ai_code_audit.triage_context import redact_sensitive_text
 from ai_codeguard.cli import (
     CLIInputError,
     _materialize_repo,
@@ -29,7 +33,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OPENGREP_RULES = PROJECT_ROOT / "rules" / "opengrep"
 
 
-def scan_payload(payload: dict[str, Any]) -> dict[str, object]:
+def scan_payload(
+    payload: dict[str, Any],
+    *,
+    router: RouterLike | None = None,
+) -> dict[str, object]:
     languages = payload.get("languages")
     if languages is not None and (
         not isinstance(languages, list)
@@ -37,6 +45,7 @@ def scan_payload(payload: dict[str, Any]) -> dict[str, object]:
     ):
         raise CLIInputError("payload.languages must be a list of strings")
     backend = _backend_input(payload)
+    mode = _mode_input(payload)
     diff = _diff_input(payload)
     with _materialize_repo(payload) as (
         repo_path,
@@ -105,13 +114,97 @@ def scan_payload(payload: dict[str, Any]) -> dict[str, object]:
             *envelope["warnings"],
         ]
         try:
-            return postprocess_envelope(
+            envelope = postprocess_envelope(
                 envelope,
                 repo_path=repo_path,
                 baseline_path=_baseline_input(payload),
             )
         except BaselineError as error:
             raise CLIInputError(str(error)) from error
+        envelope["summary"]["mode"] = mode
+        if mode == "hybrid":
+            triage_envelope(envelope, repo_path=repo_path, router=router)
+        return envelope
+
+
+def triage_envelope(
+    envelope: dict[str, object],
+    *,
+    repo_path: Path,
+    router: RouterLike | None = None,
+) -> dict[str, object]:
+    """Attach LLM verdict metadata without removing static Findings."""
+
+    findings = envelope.get("findings")
+    findings = findings if isinstance(findings, list) else []
+    limit = _triage_limit()
+    active_router = router
+    owns_router = False
+    if active_router is None:
+        try:
+            active_router = LLMRouter.from_env()
+            owns_router = True
+        except Exception as error:
+            _append_warning(envelope, _triage_unavailable_warning(error))
+            _set_triage_summary(
+                envelope,
+                total=0,
+                errors=1,
+                skipped=len(findings),
+            )
+            return envelope
+    eligible = [
+        finding
+        for finding in findings
+        if isinstance(finding, dict) and _should_triage(finding)
+    ]
+    selected = eligible[:limit]
+    reviewer = FindingTriageReviewer(
+        active_router,
+        model_version=os.environ.get(
+            "CODEGUARD_TRIAGE_MODEL_VERSION", "cheap-route"
+        ),
+    )
+    reviewed = confirmed = dismissed = errors = cached = 0
+    try:
+        for finding in selected:
+            result = reviewer.review(finding, repo_path=repo_path)
+            metadata = finding.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
+                finding["metadata"] = metadata
+            metadata["llm_triage"] = result.to_metadata()
+            if result.status == "error":
+                errors += 1
+                continue
+            reviewed += 1
+            cached += int(result.cached)
+            confirmed += int(result.confirmed is True)
+            dismissed += int(result.confirmed is False)
+    finally:
+        if owns_router:
+            close = getattr(active_router, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception as error:
+                    _append_warning(
+                        envelope,
+                        _triage_unavailable_warning(error).replace(
+                            "unavailable", "close failed", 1
+                        ),
+                    )
+    _set_triage_summary(
+        envelope,
+        total=len(selected),
+        reviewed=reviewed,
+        confirmed=confirmed,
+        dismissed=dismissed,
+        errors=errors,
+        cached=cached,
+        skipped=len(findings) - len(selected),
+    )
+    return envelope
 
 
 def _backend_input(payload: dict[str, Any]) -> str:
@@ -124,6 +217,81 @@ def _backend_input(payload: dict[str, Any]) -> str:
             "payload.backend must be auto, builtin, or opengrep"
         )
     return backend
+
+
+def _mode_input(payload: dict[str, Any]) -> str:
+    raw = payload.get("mode", "fast")
+    if not isinstance(raw, str):
+        raise CLIInputError("payload.mode must be a string")
+    mode = raw.lower()
+    if mode not in {"fast", "hybrid"}:
+        raise CLIInputError("payload.mode must be fast or hybrid")
+    return mode
+
+
+def _should_triage(finding: dict[str, Any]) -> bool:
+    severity = str(finding.get("severity") or "medium").lower()
+    confidence = finding.get("confidence")
+    low_confidence = (
+        isinstance(confidence, (int, float))
+        and not isinstance(confidence, bool)
+        and float(confidence) < 0.75
+    )
+    return severity in {"high", "critical"} or low_confidence
+
+
+def _triage_limit() -> int:
+    raw = os.environ.get("CODEGUARD_TRIAGE_MAX_FINDINGS", "20")
+    try:
+        limit = int(raw)
+    except ValueError as error:
+        raise CLIInputError(
+            "CODEGUARD_TRIAGE_MAX_FINDINGS must be an integer"
+        ) from error
+    if limit <= 0:
+        raise CLIInputError(
+            "CODEGUARD_TRIAGE_MAX_FINDINGS must be greater than zero"
+        )
+    return limit
+
+
+def _append_warning(envelope: dict[str, object], warning: str) -> None:
+    warnings = envelope.get("warnings")
+    if not isinstance(warnings, list):
+        warnings = []
+        envelope["warnings"] = warnings
+    warnings.append(warning)
+
+
+def _triage_unavailable_warning(error: Exception) -> str:
+    detail = redact_sensitive_text(f"{type(error).__name__}: {error}")[:240]
+    return f"LLM triage unavailable; static findings preserved ({detail})"
+
+
+def _set_triage_summary(
+    envelope: dict[str, object],
+    *,
+    total: int,
+    reviewed: int = 0,
+    confirmed: int = 0,
+    dismissed: int = 0,
+    errors: int = 0,
+    cached: int = 0,
+    skipped: int = 0,
+) -> None:
+    summary = envelope.get("summary")
+    if not isinstance(summary, dict):
+        summary = {}
+        envelope["summary"] = summary
+    summary["llm_triage"] = {
+        "selected": total,
+        "reviewed": reviewed,
+        "confirmed": confirmed,
+        "dismissed": dismissed,
+        "errors": errors,
+        "cached": cached,
+        "skipped": skipped,
+    }
 
 
 def _backend_timeout() -> float:
@@ -239,4 +407,4 @@ def _configure_utf8_streams() -> None:
             reconfigure(encoding="utf-8")
 
 
-__all__ = ["build_parser", "main", "scan_payload"]
+__all__ = ["build_parser", "main", "scan_payload", "triage_envelope"]

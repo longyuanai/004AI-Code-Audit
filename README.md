@@ -174,6 +174,29 @@ severity_weight * confidence * reachability_weight
 结果按风险分数从高到低稳定排序。Git diff 扫描会提高变更范围内
 Finding 的 `change_scope_weight`。
 
+### Hybrid LLM 复核
+
+在 JSON payload 中设置 `"mode":"hybrid"`，会在静态扫描、去重、
+分类和风险排序之后，仅把 high/critical 或低置信度 Finding 的最小
+脱敏上下文交给 `LLMRouter.chat(TaskTier.CHEAP, ChatRequest)`：
+
+```powershell
+$env:CODEGUARD_TRIAGE_MAX_FINDINGS = "20"
+$env:CODEGUARD_TRIAGE_MODEL_VERSION = "cheap-route-v1"
+$payload = @{
+  repo_path = "C:\work\service"
+  backend = "opengrep"
+  mode = "hybrid"
+} | ConvertTo-Json -Compress
+
+$payload | python -m ai_code_audit scan --json
+```
+
+真假判断、中文解释、修复建议、模型和 token 用量写入
+`metadata.llm_triage`。LLM 否定结果不会删除静态 Finding；路由、网络、
+超时或 JSON 解析失败也只记录降级状态。默认 `mode` 为 `fast`，不会
+发起 LLM 请求。
+
 ### PR review bot (BYO-key)
 
 `--output github` produces a [GitHub PR review payload](https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request) — a summary plus one inline comment per finding (rule, CWE link, Stage 2 reasoning, suggested fix, and a copy-paste suppression hint). It carries no credentials; a thin workflow step submits it with the repo's built-in `GITHUB_TOKEN`, and you bring your own LLM key as a secret (nothing goes to a hosted service). See [`docs/examples/pr-review.yml`](docs/examples/pr-review.yml) — it scans only the PR's changed files and passes the PR diff via `--diff`, so comments land only on changed *lines* (pre-existing findings in touched files are dropped before Stage 2, costing no LLM calls), and it falls back to a Stage-1-only advisory pass when no key is set.
