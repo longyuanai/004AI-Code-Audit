@@ -1,6 +1,6 @@
 from pathlib import Path
-import tomllib
 
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -15,7 +15,7 @@ def test_pyproject_uses_shared_core_path_dependency() -> None:
     config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     dependency = config["tool"]["poetry"]["dependencies"]["shared-llm-core"]
     assert dependency == {
-        "path": "../../000shared-llm-core",
+        "path": "../000shared-llm-core",
         "develop": True,
     }
 
