@@ -46,7 +46,7 @@ def _ensure_python_deps_in_pythonpath() -> None:
         os.pathsep.join((deps, *parts)) if parts else deps
     )
 
-from shared_llm_core import (  # noqa: E402
+from shared_llm_core import (
     ChatChoice,
     ChatMessage,
     ChatResponse,
@@ -111,6 +111,17 @@ def stub_router_with():
 
 @pytest.fixture
 def cp314_tree_sitter_binding():
+    """Return a tree-sitter binding built for the active CPython ABI.
+
+    The fixture name is retained for compatibility with the existing test
+    suite, which originally needed a local CPython 3.14 wheel workaround.
+    """
+
     binding = import_module("tree_sitter._binding")
-    assert "cp314" in str(binding.__file__)
+    abi_version = f"{sys.version_info.major}{sys.version_info.minor}"
+    binding_path = str(binding.__file__)
+    assert any(
+        marker in binding_path
+        for marker in (f"cp{abi_version}", f"cpython-{abi_version}")
+    )
     return binding
