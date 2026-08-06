@@ -14,7 +14,10 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-shared-llm-core = { path = "../../000shared-llm-core", develop = true }
+# Sibling-relative, matching every other suite repository. The previous
+# "../../" assumed this repo sat one level down inside a local container
+# directory; that layout does not exist when CI checks the repo out on its own.
+shared-llm-core = { path = "../000shared-llm-core", develop = true }
 tree-sitter = ">=0.25,<0.27"
 tree-sitter-cpp = "0.23.4"
 tree-sitter-python = "0.25.0"
