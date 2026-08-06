@@ -3,15 +3,24 @@ from __future__ import annotations
 import sys
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import httpx
 import pytest
 import uvicorn
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SUITE_ROOT = PROJECT_ROOT.parents[1]
+
+
+def _find_suite_root() -> Path:
+    for candidate in PROJECT_ROOT.parents:
+        if (candidate / "000shared-integration" / "src").is_dir():
+            return candidate
+    raise RuntimeError("000shared-integration sibling checkout is required")
+
+
+SUITE_ROOT = _find_suite_root()
 INTEGRATION_SRC = SUITE_ROOT / "000shared-integration" / "src"
 if str(INTEGRATION_SRC) not in sys.path:
     sys.path.insert(0, str(INTEGRATION_SRC))
