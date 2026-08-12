@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
+
+from shared_llm_core.untrusted import wrap_untrusted
 
 CONTEXT_RADIUS = 4
 MAX_CONTEXT_CHARS = 6_000
@@ -144,7 +147,10 @@ def build_triage_prompt(context: TriageContext) -> str:
         "复核下面已经由静态分析发现的代码安全问题。不要推断未提供的"
         "文件或调用链。输出 JSON object，字段必须为：confirmed(boolean)、"
         "confidence(0到1)、explanation(简洁中文)、remediation(简洁修复建议)。\n"
-        + json.dumps(context.to_payload(), ensure_ascii=False, sort_keys=True)
+        + wrap_untrusted(
+            json.dumps(context.to_payload(), ensure_ascii=False, sort_keys=True),
+            kind="source_code",
+        )
     )
 
 

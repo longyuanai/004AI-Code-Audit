@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
 
 from shared_llm_core import (
     ChatMessage,
@@ -13,6 +14,7 @@ from shared_llm_core import (
     ChatResponse,
     TaskTier,
 )
+from shared_llm_core.untrusted import INJECTION_GUARD_SYSTEM_PROMPT
 
 from ai_code_audit.triage_context import (
     build_triage_context,
@@ -108,7 +110,8 @@ class FindingTriageReviewer:
                     role="system",
                     content=(
                         "你是 AI-CodeGuard 静态分析复核器。只判断提供的"
-                        "证据，不假设其他代码；不得输出或还原已脱敏值。"
+                        "证据，不假设其他代码；不得输出或还原已脱敏值。\n"
+                        + INJECTION_GUARD_SYSTEM_PROMPT
                     ),
                 ),
                 ChatMessage(

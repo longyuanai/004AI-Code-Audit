@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Protocol
+from typing import Protocol
 
 from shared_llm_core import (
     ChatMessage,
     ChatRequest,
     ChatResponse,
     TaskTier,
+)
+from shared_llm_core.untrusted import (
+    INJECTION_GUARD_SYSTEM_PROMPT,
+    wrap_untrusted,
 )
 
 from codeguard.dataflow import DataflowPath
@@ -42,7 +47,8 @@ class DataflowExplainer:
                     content=(
                         "你是 AI-CodeGuard 数据流解释器。只解释输入中已经"
                         "验证的 source、调用链和 sink，不补充不存在的步骤。"
-                        "输出 JSON：{\"explanation\":\"一条中文句子\"}。"
+                        "输出 JSON：{\"explanation\":\"一条中文句子\"}。\n"
+                        + INJECTION_GUARD_SYSTEM_PROMPT
                     ),
                 ),
                 ChatMessage(
@@ -120,7 +126,10 @@ def build_explanation_prompt(path: DataflowPath) -> str:
         "请把下面经过静态分析验证的数据流写成一条中文安全解释，"
         "格式类似“变量 x 在 func_a:23 接收 HTTP body，在 "
         "func_b:45 流入 SQL，触发 SQLi”。\n"
-        + json.dumps(payload, ensure_ascii=False, indent=2)
+        + wrap_untrusted(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            kind="source_code",
+        )
     )
 
 

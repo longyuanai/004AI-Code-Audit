@@ -79,10 +79,13 @@ def test_prompt_is_deterministic_and_requests_structured_verdict(
 
     first = build_triage_prompt(context)
     second = build_triage_prompt(context)
-    payload = json.loads(first.split("\n", 1)[1])
+    wrapped = first.split("\n", 1)[1]
+    payload = json.loads(wrapped.split("\n", 1)[1].rsplit("\n", 1)[0])
 
     assert first == second
     assert "confirmed(boolean)" in first
+    assert wrapped.startswith('<UNTRUSTED_DATA kind="source_code">')
+    assert wrapped.endswith("</UNTRUSTED_DATA>")
     assert payload["rule_id"] == "CG-OG-PY-001"
     assert payload["location"] == {"line": 1, "path": "app.py"}
 
