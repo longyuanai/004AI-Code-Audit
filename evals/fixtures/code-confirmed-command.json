@@ -1,0 +1,1 @@
+{"confirmed": true, "confidence": 0.97, "reasoning": "Synthetic command input reaches a process-spawn sink without validation."}
