@@ -12,6 +12,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 
+from shared_llm_core.telemetry import span
+
 from ai_code_audit import rules
 from ai_code_audit.dataflow import DataflowRule, register_dataflow_rule
 from ai_code_audit.rules.taint import TaintSourceToSinkRule
@@ -50,6 +52,14 @@ class GitCloneError(CLIInputError):
 
 
 def scan_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    with span(
+        "product.scan",
+        attributes={"product.id": "004", "scan.target_type": "repository"},
+    ):
+        return _scan_payload(payload)
+
+
+def _scan_payload(payload: dict[str, Any]) -> dict[str, Any]:
     with _materialize_repo(payload) as (
         repo_path,
         repository_source,
