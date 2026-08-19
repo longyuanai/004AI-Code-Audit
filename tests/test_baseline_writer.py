@@ -11,7 +11,7 @@ from ai_code_audit.postprocess import (
     build_baseline,
     write_baseline,
 )
-from ai_codeguard.cli import CLIInputError
+from ai_code_audit.hybrid_cli import CLIInputError
 
 
 def test_build_baseline_counts_repeated_fingerprints() -> None:

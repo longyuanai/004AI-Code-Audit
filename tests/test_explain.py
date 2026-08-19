@@ -2,12 +2,12 @@ import pytest
 
 from shared_llm_core import TaskTier
 
-from codeguard.dataflow import CallEdge, DataflowPath
-from codeguard.explain import (
+from ai_code_audit.dataflow import CallEdge, DataflowPath
+from ai_code_audit.explain import (
     DataflowExplainer,
     build_explanation_prompt,
 )
-from codeguard.taint import TaintStep
+from ai_code_audit.taint import TaintStep
 
 
 def _path(*, variable: str = "query") -> DataflowPath:

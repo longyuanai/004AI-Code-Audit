@@ -27,7 +27,7 @@ from ai_code_audit.gitutils import GitDiffError, collect_diff
 from ai_code_audit.scanner import scan_diff, scan_repository
 from ai_code_audit.triage import FindingTriageReviewer, RouterLike
 from ai_code_audit.triage_context import redact_sensitive_text
-from ai_codeguard.cli import (
+from ai_code_audit.hybrid_cli import (
     CLIInputError,
     _materialize_repo,
     _payload_from_args,

@@ -7,7 +7,6 @@ license = "MIT"
 packages = [
     { include = "analyzer", from = "src" },
     { include = "ai_code_audit", from = "src" },
-    { include = "ai_codeguard", from = "src" },
     { include = "codeguard", from = "src" },
     { include = "parser", from = "src" },
 ]

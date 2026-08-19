@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from tree_sitter import Node
 
-from codeguard.taint import (
+from ai_code_audit.taint import (
     TaintStep,
     _ASSIGNMENT_TYPES,
     _CALL_TYPES,
@@ -23,7 +23,7 @@ from codeguard.taint import (
     _text,
     _walk_region,
 )
-from codeguard.v05 import (
+from ai_code_audit.v05 import (
     Finding,
     FindingSeverity,
     FindingSource,

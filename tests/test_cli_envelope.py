@@ -30,7 +30,7 @@ def _run_cli(payload: dict[str, object]) -> dict[str, object]:
         [
             sys.executable,
             "-m",
-            "ai_codeguard.cli",
+            "ai_code_audit.hybrid_cli",
             "scan",
             "--input",
             json.dumps(payload),

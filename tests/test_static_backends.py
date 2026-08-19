@@ -193,7 +193,7 @@ def test_auto_backend_falls_back_with_warning(
 
 
 def test_cli_rejects_explicit_unavailable_opengrep(tmp_path: Path) -> None:
-    from ai_codeguard.cli import CLIInputError
+    from ai_code_audit.hybrid_cli import CLIInputError
 
     with pytest.raises(CLIInputError, match="CODEGUARD_OPENGREP_PATH"):
         scan_payload(

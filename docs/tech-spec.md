@@ -74,8 +74,8 @@ AI-CodeGuard 是面向本地开发、Pull Request 和 CI 的多语言代码安�
 
 - GitHub Actions 尚未对当前融合分支报告 checks。
 - TypeScript typecheck 存在既存 provider 类型缺口。
-- IntegrationGateway 仍以 `ai_codeguard.cli` 为产品入口；融合能力主要位于
-  `ai_code_audit.cli`，尚未统一。
+- IntegrationGateway 仍以 `codeguard.cli` 为兼容入口；该薄入口转发到
+  `ai_code_audit.hybrid_cli`，规范产品入口位于 `ai_code_audit.cli`。
 - 真实 LLM provider 尚未进行受控、可审计的 opt-in E2E 验收。
 - 当前生产 Opengrep 规则数量有限，不是完整通用 SAST 规则库。
 - Joern 深度后端尚未实施，跨文件数据流不属于默认能力。
@@ -97,7 +97,7 @@ AI-CodeGuard 是面向本地开发、Pull Request 和 CI 的多语言代码安�
 GA 前必须收敛到一个规范入口：
 
 ```text
-python -m ai_codeguard.cli scan ...
+python -m codeguard.cli scan ...
         或
 python -m ai_code_audit scan ...
 ```

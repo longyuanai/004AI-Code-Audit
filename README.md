@@ -104,18 +104,18 @@ Python 3.14：
 
 ```powershell
 $payload = '{"repo_path":"C:\\work\\service","languages":["python","go","java"]}'
-python -m ai_codeguard.cli scan --input $payload --json
+python -m codeguard.cli scan --input $payload --json
 
 # 也可从 stdin 读取 payload
 '{"repo_path":"samples/mini_repo"}' |
-  python -m ai_codeguard.cli scan --json
+  python -m codeguard.cli scan --json
 ```
 
 Git URL 使用浅克隆；`--repo-path` 同时提供时可在网络或 clone 失败后
 安全降级到本地仓库：
 
 ```powershell
-python -m ai_codeguard.cli scan `
+python -m codeguard.cli scan `
   --git-url https://example.invalid/team/service.git `
   --repo-path C:\work\service `
   --json

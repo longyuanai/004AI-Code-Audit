@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from tree_sitter import Node
 
-from codeguard.v05 import (
+from ai_code_audit.v05 import (
     Finding,
     FindingSeverity,
     FindingSource,

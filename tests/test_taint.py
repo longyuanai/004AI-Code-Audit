@@ -1,5 +1,5 @@
-from codeguard.taint import TaintAnalyzer, TaintRule, register_taint_rule
-from codeguard.v05 import (
+from ai_code_audit.taint import TaintAnalyzer, TaintRule, register_taint_rule
+from ai_code_audit.v05 import (
     FindingSeverity,
     FindingSource,
     RuleContext,

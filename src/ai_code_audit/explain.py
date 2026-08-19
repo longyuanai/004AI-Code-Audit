@@ -18,7 +18,7 @@ from shared_llm_core.untrusted import (
     wrap_untrusted,
 )
 
-from codeguard.dataflow import DataflowPath
+from ai_code_audit.dataflow import DataflowPath
 
 
 class RouterLike(Protocol):

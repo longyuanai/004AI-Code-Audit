@@ -12,11 +12,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 
-from codeguard import rules
-from codeguard.dataflow import DataflowRule, register_dataflow_rule
-from codeguard.rules.taint import TaintSourceToSinkRule
-from codeguard.taint import TaintAnalyzer
-from codeguard.v05 import Finding, RuleContext, RuleEngine
+from ai_code_audit import rules
+from ai_code_audit.dataflow import DataflowRule, register_dataflow_rule
+from ai_code_audit.rules.taint import TaintSourceToSinkRule
+from ai_code_audit.taint import TaintAnalyzer
+from ai_code_audit.v05 import Finding, RuleContext, RuleEngine
 
 SUPPORTED_LANGUAGES = ("python", "go", "java")
 LANGUAGE_EXTENSIONS = {
@@ -164,7 +164,7 @@ def _scan_local_payload(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python -m ai_codeguard.cli",
+        prog="python -m codeguard.cli",
         description="Scan a repository and emit a Finding JSON envelope.",
     )
     parser.add_argument(

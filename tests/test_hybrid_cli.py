@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from ai_code_audit.cli import scan_payload, triage_envelope
-from ai_codeguard.cli import CLIInputError
+from ai_code_audit.hybrid_cli import CLIInputError
 
 
 CONFIRMED = (
