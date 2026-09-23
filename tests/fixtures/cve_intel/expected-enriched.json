@@ -1,0 +1,185 @@
+{
+  "findings": [
+    {
+      "id": "code-py-a938188ee8e3",
+      "source": "004",
+      "severity": "high",
+      "confidence": 0.85,
+      "title": "Potential taint flow in app.py:2",
+      "description": "User-controlled input reaches eval.",
+      "host": "C:\\授权样本\\app.py",
+      "narrative": "User-controlled input reaches eval.",
+      "evidence": [
+        "source line 1",
+        "sink line 2: eval(value)"
+      ],
+      "tags": [
+        "python",
+        "taint"
+      ],
+      "metadata": {
+        "language": "python",
+        "line": 2,
+        "column": 1,
+        "relative_path": "app.py",
+        "rule_id": "004-phase2-taint",
+        "fingerprint": "b0de06e170a3f2f6",
+        "data_classifications": [],
+        "risk": {
+          "score": 2.125,
+          "level": "high"
+        },
+        "code_audit_enrichment": {
+          "schema_version": 1,
+          "status": "not_applicable",
+          "cve": null,
+          "providers": {},
+          "values": {
+            "cvss_v3": null,
+            "cvss_vector": null,
+            "cwe": null,
+            "epss": null,
+            "epss_percentile": null,
+            "kev": null
+          },
+          "warnings": []
+        }
+      }
+    },
+    {
+      "id": "code-dep-0001",
+      "source": "004",
+      "severity": "medium",
+      "confidence": 0.7,
+      "title": "Vulnerable dependency pattern",
+      "description": "Original static description must survive.",
+      "cve": "cve-2024-1234",
+      "evidence": [
+        "requirements.txt:3 example-lib==1.0"
+      ],
+      "related": [
+        "code-py-a938188ee8e3"
+      ],
+      "x_vendor_field": {
+        "kept": true
+      },
+      "metadata": {
+        "rule_id": "004-example-dep",
+        "code_audit_enrichment": {
+          "schema_version": 1,
+          "status": "enriched",
+          "cve": "CVE-2024-1234",
+          "providers": {
+            "nvd": {
+              "status": "ok",
+              "fetched_at": "2026-09-23T11:00:00+00:00",
+              "expires_at": "2026-09-24T11:00:00+00:00"
+            },
+            "kev": {
+              "status": "ok",
+              "fetched_at": "2026-09-23T11:00:00+00:00",
+              "expires_at": "2026-09-24T11:00:00+00:00"
+            },
+            "epss": {
+              "status": "ok",
+              "fetched_at": "2026-09-23T11:00:00+00:00",
+              "expires_at": "2026-09-24T11:00:00+00:00"
+            }
+          },
+          "values": {
+            "cvss_v3": 9.8,
+            "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+            "cwe": "CWE-94",
+            "epss": 0.42,
+            "epss_percentile": 0.9,
+            "kev": true
+          },
+          "warnings": []
+        }
+      }
+    },
+    {
+      "id": "code-dep-0002",
+      "source": "004",
+      "severity": "low",
+      "confidence": 0.5,
+      "title": "Dependency without cached intelligence",
+      "cve": "CVE-2023-99999",
+      "metadata": {
+        "code_audit_enrichment": {
+          "schema_version": 1,
+          "status": "unknown",
+          "cve": "CVE-2023-99999",
+          "providers": {
+            "nvd": {
+              "status": "missing",
+              "fetched_at": null,
+              "expires_at": null
+            },
+            "kev": {
+              "status": "missing",
+              "fetched_at": null,
+              "expires_at": null
+            },
+            "epss": {
+              "status": "missing",
+              "fetched_at": null,
+              "expires_at": null
+            }
+          },
+          "values": {
+            "cvss_v3": null,
+            "cvss_vector": null,
+            "cwe": null,
+            "epss": null,
+            "epss_percentile": null,
+            "kev": null
+          },
+          "warnings": [
+            "nvd: no cached record for CVE-2023-99999",
+            "kev: no cached record for CVE-2023-99999",
+            "epss: no cached record for CVE-2023-99999"
+          ]
+        }
+      }
+    },
+    {
+      "id": "code-dep-0003",
+      "source": "004",
+      "severity": "low",
+      "confidence": 0.5,
+      "title": "Malformed CVE reference",
+      "cve": "CVE-24-1",
+      "metadata": {
+        "code_audit_enrichment": {
+          "schema_version": 1,
+          "status": "invalid_input",
+          "cve": null,
+          "providers": {},
+          "values": {
+            "cvss_v3": null,
+            "cvss_vector": null,
+            "cwe": null,
+            "epss": null,
+            "epss_percentile": null,
+            "kev": null
+          },
+          "warnings": [
+            "cve 'CVE-24-1' is not a CVE identifier"
+          ]
+        }
+      }
+    }
+  ],
+  "summary": {
+    "repository_source": "local",
+    "files_scanned": 1,
+    "mode": "fast"
+  },
+  "warnings": [],
+  "x_unknown_top_level": [
+    1,
+    2,
+    3
+  ]
+}

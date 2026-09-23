@@ -1,0 +1,58 @@
+{
+  "findings": [
+    {
+      "id": "code-py-a938188ee8e3",
+      "source": "004",
+      "severity": "high",
+      "confidence": 0.85,
+      "title": "Potential taint flow in app.py:2",
+      "description": "User-controlled input reaches eval.",
+      "host": "C:\\授权样本\\app.py",
+      "narrative": "User-controlled input reaches eval.",
+      "evidence": ["source line 1", "sink line 2: eval(value)"],
+      "tags": ["python", "taint"],
+      "metadata": {
+        "language": "python",
+        "line": 2,
+        "column": 1,
+        "relative_path": "app.py",
+        "rule_id": "004-phase2-taint",
+        "fingerprint": "b0de06e170a3f2f6",
+        "data_classifications": [],
+        "risk": {"score": 2.125, "level": "high"}
+      }
+    },
+    {
+      "id": "code-dep-0001",
+      "source": "004",
+      "severity": "medium",
+      "confidence": 0.7,
+      "title": "Vulnerable dependency pattern",
+      "description": "Original static description must survive.",
+      "cve": "cve-2024-1234",
+      "evidence": ["requirements.txt:3 example-lib==1.0"],
+      "related": ["code-py-a938188ee8e3"],
+      "x_vendor_field": {"kept": true},
+      "metadata": {"rule_id": "004-example-dep"}
+    },
+    {
+      "id": "code-dep-0002",
+      "source": "004",
+      "severity": "low",
+      "confidence": 0.5,
+      "title": "Dependency without cached intelligence",
+      "cve": "CVE-2023-99999"
+    },
+    {
+      "id": "code-dep-0003",
+      "source": "004",
+      "severity": "low",
+      "confidence": 0.5,
+      "title": "Malformed CVE reference",
+      "cve": "CVE-24-1"
+    }
+  ],
+  "summary": {"repository_source": "local", "files_scanned": 1, "mode": "fast"},
+  "warnings": [],
+  "x_unknown_top_level": [1, 2, 3]
+}
