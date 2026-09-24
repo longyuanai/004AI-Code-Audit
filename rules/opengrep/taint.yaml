@@ -12,8 +12,10 @@ rules:
     pattern-sources:
       - pattern: input(...)
       - pattern: os.getenv(...)
+      - pattern: sys.argv
     pattern-sinks:
       - pattern: eval(...)
+      - pattern: exec(...)
 
   - id: CG-OG-CPP-001
     mode: taint
