@@ -1,381 +1,160 @@
-# AI-CodeGuard 商用版技术规范
+# 002 AI-Code-Audit 技术规范
 
-> 文档版本：1.0-draft
-> 基线日期：2026-08-01
-> 适用仓库：`004AI-CodeGuard-upgrade`
-> 状态：商用化实施基线；未满足本文 GA Gate 前不得宣称生产级或企业级 GA
-> 规范优先级：冻结共享契约 > 本文 > 专题设计文档 > 历史路线图
+版本：1.0 / 2026-09-23，合并后的开发基线。Python 包 ai_code_audit、TypeScript 包 ai-codeguard、来源 `004` 保持。
+旧 AI-CodeGuard 商业技术规范归档；冻结契约仍以 shared-llm-core 为准。
 
-## 1. 文档目的
+## 1. 产品目标
 
-本文是 AI-CodeGuard 后续开发、测试、发布和验收的唯一权威技术规范。
-它明确区分：
+先完成可重复运行的代码安全审计与修复验证闭环：读取授权代码 → 静态发现 → 可选模型辅助 → 风险与证据报告 → 基线/diff 复查。初期以命令行和 CI 结果交付；共享 web-ui 后接入，不另做一套后台。
 
-- **已实现**：源码存在，并有本地自动化测试或真实 smoke 证据。
-- **部分实现**：主链路存在，但缺少发布、CI、真实环境或运维证据。
-- **规划**：尚未达到可对外承诺的状态。
+Vulnerability 模块位于 `modules/vulnerability-analysis`，仍是独立 Git 仓，负责扫描器报告归一化、CVE 情报、缓存和风险能力。Firmware 复用此唯一源码；不要建立 Code/Firmware 两份情报数据库实现。
 
-“商用标准”在本项目中不等于堆叠功能，而是同时满足：稳定契约、可重复
-构建、安全默认值、可观测失败、可回滚发布、许可证合规和持续质量门禁。
+## 2. 当前实现与入口
 
-## 2. 产品定位与边界
-
-AI-CodeGuard 是面向本地开发、Pull Request 和 CI 的多语言代码安全扫描器。
-它采用确定性静态分析作为第一证据源，并可选择使用 LLM 对已有 Finding
-进行复核、中文解释和修复建议。
-
-### 2.1 目标用户
-
-- 开发者：提交前快速发现高价值代码风险。
-- 安全工程师：获得可追踪的规则、证据链和 SARIF。
-- DevSecOps 团队：对新增 Finding 设置合并门禁。
-- 私有化客户：在源码不出域的条件下运行静态扫描或本地模型复核。
-
-### 2.2 非目标
-
-- 不替代人工安全评审、渗透测试或完整 SDL。
-- 不在默认安装中执行漏洞利用或主动攻击。
-- 不让 LLM 对全仓进行无证据盲扫。
-- 不自行重造完整 CFG、SSA 或通用跨文件数据流引擎。
-- 不承诺当前规则覆盖所有 CWE、框架和业务逻辑漏洞。
-
-### 2.3 商业发布层级
-
-| 层级 | 定义 | 当前状态 |
-|---|---|---|
-| Developer Preview | 本地可运行，接口可能继续补强 | 已达到 |
-| Beta | 安装、CI、规则、回滚和文档均可重复验证 | 未达到 |
-| Release Candidate | 无 P0/P1 缺陷，供应链和真实环境验收完成 | 未达到 |
-| GA | 满足本文全部 GA Gate，可对外提供支持承诺 | 未达到 |
-
-## 3. 当前事实基线
-
-截至 2026-08-01，当前分支已实现：
-
-- Python、C++、Java、Go、TypeScript 的 tree-sitter 适配。
-- `builtin`、`auto`、`opengrep` 静态后端。
-- 五语言首批 Opengrep taint 规则。
-- 本地仓库、Git URL、Git diff 扫描。
-- 冻结 v0.5 §15 JSON envelope 和 SARIF 2.1.0。
-- 稳定指纹、去重、行内 suppression、baseline 读取与原子生成。
-- 敏感数据分类和可解释风险评分。
-- `fast` 与 `hybrid` 模式；hybrid 使用 cheap-tier StubRouter 测试。
-- 新 Finding 质量门禁：0=通过，1=Finding 门禁，2=输入错误。
-
-最近验证证据：
-
-- Python：177 passed。
-- Node/Vitest：586 passed，2 skipped。
-- ESLint：通过。
-- tree-sitter CPython 3.14 binding：通过。
-- 真实 Opengrep benchmark：5 种语言、10 个受控漏洞命中。
-
-当前限制：
-
-- GitHub Actions 尚未对当前融合分支报告 checks。
-- TypeScript typecheck 存在既存 provider 类型缺口。
-- IntegrationGateway 仍以 `codeguard.cli` 为兼容入口；该薄入口转发到
-  `ai_code_audit.hybrid_cli`，规范产品入口位于 `ai_code_audit.cli`。
-- 真实 LLM provider 尚未进行受控、可审计的 opt-in E2E 验收。
-- 当前生产 Opengrep 规则数量有限，不是完整通用 SAST 规则库。
-- Joern 深度后端尚未实施，跨文件数据流不属于默认能力。
-
-## 4. 冻结契约与兼容性
-
-### 4.1 不可破坏的共享契约
-
-- `shared-llm-core` v0.1 §1-§6 的符号、字段和方法签名完全冻结。
-- LLM 调用只能使用 `LLMRouter.chat(TaskTier, ChatRequest)`。
-- cheap triage 必须使用 `TaskTier.CHEAP`。
-- `Finding` 必须保持 v0.5 §9 兼容。
-- CLI envelope 必须保持 v0.5 §15 兼容。
-- 产品来源固定为 `FindingSource.CODE` / `source="004"`。
-- 新信息只能写入契约允许的 `tags`、`metadata` 或既有可选字段。
-
-### 4.2 产品入口
-
-GA 前必须收敛到一个规范入口：
-
-```text
-python -m codeguard.cli scan ...
-        或
-python -m ai_code_audit scan ...
-```
-
-最终只能有一个作为 IntegrationGateway 和对外文档的 canonical CLI；另一个
-必须成为薄兼容层，且具有契约测试，不能维护两套扫描逻辑。
-
-### 4.3 兼容性承诺
-
-- 默认模式保持离线、确定性，不要求 API key。
-- 未配置 Opengrep 时 `auto` 可降级，且必须给出 machine-readable warning。
-- 未配置 LLM 时 `fast` 正常工作；`hybrid` 失败不得删除静态 Finding。
-- Windows 路径、UTF-8、CRLF 和 `.python-deps` 布局必须持续支持。
-
-## 5. 目标架构
-
-```text
-Local repo / Git URL / Git diff
-              |
-              v
-Scope + language registry + exclusions
-              |
-       +------+------+
-       |             |
-       v             v
-Opengrep backend   Builtin fallback
-       |             |
-       +------+------+
-              v
-Finding normalization
-rule ID / CWE / location / evidence / codeFlows / fingerprint
-              |
-              v
-Policy pipeline
-suppression -> dedupe -> baseline -> classification -> risk ranking -> gate
-              |
-       +------+------+
-       |             |
-       v             v
-Envelope/SARIF    Optional cheap-tier LLM triage
-       |             |
-       +------+------+
-              v
-CLI / IntegrationGateway / CI
-```
-
-### 5.1 组件职责
-
-- **Scope**：文件发现、排除目录、语言过滤、diff 文件和变更行。
-- **Static backend**：产生确定性 Finding，不承担产品策略。
-- **Normalizer**：将不同后端映射为稳定 Finding 和 SARIF。
-- **Policy pipeline**：执行 suppression、baseline、分类、排序和门禁。
-- **LLM triage**：只复核静态证据，不产生第一轮 Finding。
-- **Output**：保证 envelope、SARIF、退出码和错误行为稳定。
-- **Gateway**：只适配 canonical CLI，不复制扫描业务。
-
-## 6. 功能要求
-
-| ID | 要求 | 商用验收 |
-|---|---|---|
-| FR-001 | 本地仓库扫描 | 相对/绝对 Windows 与 Linux 路径均通过 |
-| FR-002 | Git URL 扫描 | 浅克隆、超时、临时目录清理、失败降级可验证 |
-| FR-003 | 多语言 | Python/C++/Java/Go/TS 每语言有 vulnerable+safe fixtures |
-| FR-004 | 可插拔后端 | builtin/auto/opengrep 行为和失败语义稳定 |
-| FR-005 | 增量扫描 | 只报告变更文件和变更行相关结果 |
-| FR-006 | 规则治理 | 稳定 ID、CWE、severity、confidence、版本和规则测试 |
-| FR-007 | Finding 后处理 | 指纹、去重、suppression、baseline 可重复 |
-| FR-008 | 数据分类 | 不复制真实敏感值，仅输出类别和解释因子 |
-| FR-009 | 风险排序 | 公式、权重和最终等级可解释、可配置 |
-| FR-010 | LLM triage | opt-in、cheap tier、脱敏、缓存、失败保留静态结果 |
-| FR-011 | 输出 | JSON envelope 与 SARIF 2.1.0 schema 验证通过 |
-| FR-012 | 质量门禁 | baseline 后只阻止达到阈值的新 Finding |
-| FR-013 | Gateway | `/v0.5/004/scan` 与 canonical CLI 输出一致 |
-| FR-014 | 健康检查 | 返回版本、后端可用性、规则版本，不泄露凭据 |
-
-## 7. 非功能要求
-
-### 7.1 性能预算
-
-以下是 RC 目标，必须由固定 benchmark 机器和语料验证：
-
-| 指标 | 目标 |
+| 位置（相对本仓） | 当前实现 |
 |---|---|
-| 1 KLOC fast scan P50 | <= 2 秒 |
-| 10 KLOC fast scan P95 | <= 30 秒 |
-| CLI 冷启动 P95 | <= 2 秒（不含外部引擎启动） |
-| 单 Finding hybrid 复核超时 | 由 Router/provider 配置，必须有上限 |
-| 默认 hybrid 最大复核数 | 20，可配置 |
-| 内存峰值 | 10 KLOC benchmark <= 1 GiB |
+| src/ai_code_audit/cli.py：scan_payload | 仓库输入、backend/mode、diff/baseline、结果后处理与混合审计 |
+| src/ai_code_audit/scanner.py、dataflow.py、taint.py | Python 扫描与分析 |
+| src/ai_code_audit/backends | builtin/opengrep 后端边界 |
+| src/ai_code_audit/languages | 按后端实现的语言能力 |
+| src/ai_code_audit/triage.py、triage_context.py | 可选 LLM 分析与上下文 |
+| src/ai_code_audit/output | envelope 与 SARIF |
+| package.json、src 下 TypeScript 实现 | Node CLI、规则、报告与 TS 测试体系 |
+| modules/vulnerability-analysis/src/ai_vuln_agent/enrich_envelope.py | 当前仅 source `002` 的增强入口 |
+| 模块 enrichment/client.py、store.py、prioritizer.py | 情报客户端、SQLite 缓存（含只读查询 ReadOnlyEnrichmentStore）、PRisk |
+| src/ai_code_audit/cve_intel | C1 离线 CVE 桥接核心与只读缓存适配；C2 阶段编排 stage.py，由 `enrich` 子命令调用 |
+| scripts/run_python_tests.py | Python 测试入口：`--scope unit` / `--scope integration`（见 §8） |
 
-性能目标在没有可重复报告前只能标记为目标，不能写成已达成。
+Python 和 TypeScript 是并存实现，不在本轮删除任一语言，也不承诺功能完全对等。新增规则应写明后端/语言/规则编号和适用范围；不能把目录存在当作全面语言支持。
 
-### 7.2 可靠性
+根入口：`suite.py code audit -- --help`、`suite.py code vulnerability -- --help`。扫描与离线 CVE 增强是两步：`scan` 保存 envelope，`enrich` 显式后处理（§6）；扫描默认不增强。suite.py 为 `code audit` 额外提供唯一漏洞模块 src。根启动器现在调用 `python -m ai_code_audit`；`python -m ai_code_audit.cli` 仅加载定义，不会调用 main。交接时须检查帮助内容与实际 JSON 输出，不能只看进程成功退出。
 
-- 相同版本、规则、输入和配置必须产生稳定指纹与确定性排序。
-- 外部后端、LLM、审计或上传失败必须有明确错误类别。
-- 静态扫描成功但 LLM 失败时，结果仍可输出。
-- 临时 clone、SARIF 和 baseline 写入必须可清理或原子替换。
-- 所有外部进程必须使用参数数组、`shell=False`、超时和 UTF-8。
+## 3. 输入、输出和不变条件
 
-### 7.3 平台矩阵
+复用现有 scan_payload 校验与 envelope，不另建一套扫描请求。代码路径和仓库来源按现有物化流程处理；禁止执行仓库内的不可信构建/安装脚本来完成静态分析。
 
-- Windows 11 + CPython 3.14 bundled dependencies。
-- `windows-latest` + 支持的正式 Python 版本。
-- `ubuntu-latest` + 支持的正式 Python 版本。
-- Node.js 20 用于保留的上游 TypeScript 回归。
+静态 Finding 是审计事实基线。LLM triage 为可选辅助；失败保留静态发现并显示 warning。未知数据和部分失败不得降低原扫描门禁。SARIF、基线/diff 和 JSON 的现有语义必须保留。
 
-## 8. 安全与隐私要求
+情报补充必须保留每条 Finding 的 id/source/severity/confidence/title/description/evidence/related 及未知字段。新情报只能作为附加 metadata/报告区；若未来需要改变严重性，应建立明确可审计政策与独立测试，不能默默重写。
 
-### 8.1 默认安全策略
+## 4. 已确认的集成阻碍
 
-- 默认 `fast`，不联网、不调用 LLM、不上传源码。
-- `hybrid` 必须显式启用并由用户配置 provider。
-- payload 不得指定任意可执行文件路径；外部工具路径只来自可信环境配置。
-- baseline、output、repo 和 trace 路径必须防目录逃逸。
-- Git URL 必须限制协议、重定向、clone 时间和 clone 大小；不得读取凭据文件。
+1. enrich_envelope._normalize_item 强制来源 `002`；直接输入代码来源 `004` 会拒绝。
+2. 当前增强会把 description 替换为 narrative，不满足保留原始代码描述的要求。
+3. CVEEnricher 缓存未命中会调用 NVD/KEV/EPSS。offline_stage 仅说明扫描后阶段，不保证不联网。
+4. 现有 PRisk 的 Exposure 来自主机端口，且未知信号按零计分；不应原样当作源代码可达性或“低风险”判断。
+5. `suite.py` 给一个能力构造环境；Code 不能假设模块已作为可导入包装入该解释器。
 
-### 8.2 LLM 数据最小化
+因此首轮采用产品内独立桥接，保持旧 source `002` 行为不变。优先复用情报记录与只读查询，避免套用现有完整 enrich_envelope 后再修字段。
 
-- 仅发送 Finding、规则、taint trace 和有限代码窗口。
-- 发送前脱敏凭据、token、私钥、邮箱、SSN、支付卡等内容。
-- 不把完整仓库、`.env`、密钥文件或历史 Git 对象加入 prompt。
-- provider 错误、日志和缓存同样必须脱敏。
-- 不默认持久化 prompt/response；启用审计时必须声明保留周期和存储位置。
+## 5. C1：离线桥接（核心已实现，2026-09-23；C2 起由 enrich 子命令调用）
 
-### 8.3 Prompt injection
+核心转换函数接收已验证 envelope 和按 CVE 索引的情报记录；禁止核心函数自己联网。缓存读取是独立适配层，复用唯一漏洞模块的 store；若缺少稳定只读 API，在该模块增加公共查询方法，不读取其私有实现来绑定产品。
 
-- 仓库内容始终视为不可信数据，不是系统指令。
-- system prompt 必须禁止执行仓库中的指令、链接或工具请求。
-- LLM 输出必须经过 JSON schema/字段校验后才能进入 metadata。
-- LLM 不得直接执行命令、修改代码或改变门禁结论。
+实现：
 
-### 8.4 凭据与日志
+- `ai_code_audit.cve_intel.bridge`：纯同步函数、无 I/O。`cve_query_keys(envelope)` 校验并返回去重、大写的待查 CVE；`bridge_code_findings(envelope, observations, now=aware_datetime)` 返回 `BridgeResult(envelope, summary)`。`observations` 为 `{CVE: {provider: ProviderObservation}}`。
+- `ai_code_audit.cve_intel.cache`：`VulnerabilityCacheReader(path)` 仅使用漏洞模块公共 `ReadOnlyEnrichmentStore`；`bridge_from_cache(envelope, cache_path, now=None)` 串起校验→只读查询→桥接。读取每个 provider 的独立记录（nvd/kev/epss），不读 `combined` 记录，因为后者把 KEV 未知折叠为 `in_known_exploited=False`。模块不可导入或库不存在/不兼容时抛 `CveCacheUnavailableError`，不自动创建缓存。
+- 不构造 `CVEEnricher` 或任何 HTTP 客户端，不做新评分；原 `enrich_envelope` 与 source `002` 限制不变。
 
-- 禁止提交 API key、token、密码、私钥和客户代码样本。
-- CI secret 只能通过 GitHub/GitLab secret store 注入。
-- stdout 的 JSON 必须保持机器可解析；诊断写 stderr。
-- 日志不得记录原始 Authorization header、provider key 或未脱敏 prompt。
+`metadata.code_audit_enrichment`（schema_version 1，样例见 tests/fixtures/cve_intel/expected-enriched.json）：
 
-## 9. 规则与检测质量治理
+| 字段 | 语义 |
+|---|---|
+| status | enriched（三源均新鲜 ok/not_found）、partial（部分可用）、stale（无可用源且有过期）、unknown（缓存无记录）、not_applicable（无 CVE）、invalid_input（CVE 非字符串或格式错） |
+| cve | 规范化查询键；原 Finding 的 `cve` 字段原样保留 |
+| providers | 每源 status：ok / not_found / missing / stale / unsupported_status（附 cache_status）/ invalid_cache，及 fetched_at、expires_at |
+| values | cvss_v3、cvss_vector、cwe、epss、epss_percentile、kev；只来自新鲜可用记录，否则为 null。kev 仅在 KEV 新鲜 not_found 时为 false |
+| warnings | 缺失、过期、异常缓存与非法输入的可读原因 |
 
-每条生产规则必须具备：
+`summary`（不写入 envelope，由 C2 决定呈现）：schema_version、evaluated_at、findings、cves、status_counts，缓存适配层另加 cache 路径。过期边界：`expires_at <= now` 视为过期，过期值不输出。已有 `metadata.code_audit_enrichment` 时拒绝，不覆盖。
 
-- 全局稳定 ID。
-- 语言、CWE、类别、严重度、置信度和说明。
-- 至少一个 vulnerable fixture 和一个 safe fixture。
-- 误报/漏报边界说明。
-- 规则变更的语义版本和 changelog。
-- 许可证来源；禁止直接复制许可证不兼容的社区规则。
+| 输入情形 | 必须行为 |
+|---|---|
+| source `004` + 有效 CVE + 新鲜缓存 | 补充附加情报；原始 Finding 保持 |
+| 无 CVE | 原样保留；not_applicable，不推测 CVE |
+| 非法 CVE | 保留原始证据；invalid_input，不能请求外部 API |
+| 缓存无记录/过期 | unknown/stale，不能补零或得出安全结论 |
+| provider 部分数据 | 保留已知值并标出缺失来源；不得把 unknown KEV 写成 false |
+| 非 `004` 来源进入 Code 专用桥接 | 明确拒绝或返回不支持错误，不悄悄改来源 |
+| envelope 畸形 | 可定位错误；不生成空的成功结果 |
 
-发布门槛：
+第一轮不做新评分，只呈现情报事实与缺失状态。保持输入对象不被原地修改；去重请求不等于去重 Finding，原条数和顺序保持。CVE 大小写可在查询键规范化，但不覆盖输入原值。
 
-- 受控 corpus precision >= 95%。
-- 受控 corpus recall >= 90%。
-- 每种声明支持的语言必须有独立结果，不用总体平均掩盖短板。
-- benchmark 必须记录工具版本、规则版本、语料 commit 和耗时。
+断网验收必须在测试中阻断所有网络访问，并断言缓存命中/未命中/过期三种路径均零请求。不要仅 mock 一个 HTTP 函数后宣称整个进程离线。
 
-## 10. 供应链与许可证
+## 6. C2：CLI 与报告闭环（已实现，2026-09-23 本机验证；2026-09-24 提交 Code 3e5fe6f，2026-09-24 推送，远程 CI 通过）
 
-- 生成 Python 与 Node 依赖锁定文件或等价可复现清单。
-- 发布生成 CycloneDX 或 SPDX SBOM。
-- CI 执行依赖漏洞扫描、secret scan 和许可证策略检查。
-- Opengrep 作为外部子进程集成，固定版本、来源 URL 和 SHA-256。
-- 不把未审查的第三方二进制或规则直接提交到发布包。
-- 发布 artifact 必须有校验和；GA 目标要求签名和 provenance。
-- Bearer、Metis、Semgrep 等项目仅借鉴架构或兼容规则格式，复制代码前
-  必须单独完成许可证审查。
-
-## 11. 配置与错误契约
-
-### 11.1 优先级
+显式离线后处理子命令，复用 C1；不联网刷新、不调用 LLM、不改默认扫描。
 
 ```text
-CLI explicit option > JSON payload > environment > project config > safe default
+ai-code-audit enrich --envelope <scan.json | -> [--cache <dir|file.sqlite3>]
+                     [--output-file <path>] [--output envelope|sarif|markdown]
+                     [--fail-on none|any|info|low|medium|high|critical]
+                     [--require-intel]
 ```
 
-敏感配置只能来自环境或 secret store，不能写入项目配置和 payload。
+- 输入：`scan --json` 保存的 source `004` envelope（UTF-8，可带 BOM，≤64 MiB，`-` 为 stdin）。`--input/--repo-path/--git-url` 与 enrich 互斥；`--envelope/--cache/--require-intel` 不能用于 scan。
+- `--cache` 缺省时用漏洞模块默认位置（Windows `%LOCALAPPDATA%\ai-vuln-agent\enrichment-v1.sqlite3`）。只在存在可查询 CVE 时打开，且只读；从不创建。
+- 输出：增强 envelope（原顶层/Finding 字段与未知字段原样），每条 Finding 的 `metadata.code_audit_enrichment`（§5），以及顶层阶段记录 `code_audit_enrichment`：schema_version、status、reason、error、cache、evaluated_at、`network_refresh: false`、sources（三个来源说明）、providers、findings、cves、status_counts。未知值保持 null。stderr 另输出一行阶段摘要。
+- SARIF（`--output sarif`，需 `--output-file`）：运行级 `runs[0].properties["longyuanai:cve-intel-stage"]` 为完整阶段记录（complete/partial/failed/skipped 与空 findings 均写入，含 reason/error/cache）；结果级 properties 另有 `longyuanai:cve-intel`（仅在有逐条情报时）。修复前缓存不存在时 SARIF 与未增强导出完全相同、丢失 failed/cache_not_found（独立审查发现），现以运行级属性区分。普通 scan SARIF 不带 run properties，保持原样。
+- Markdown（`--output markdown`，仅 enrich；可 stdout 或 `--output-file`）：由 `ai_code_audit.output.markdown` 从同一增强文档渲染，包括阶段状态/原因/错误、缓存、评估时间、“联网刷新：否”、情报来源、状态统计、扫描门禁与警告、每条原始发现（ID/来源/严重性/置信度/规则/位置/原 CVE/描述/源码证据），以及逐来源状态、采集/过期时间和情报字段。null 显示为“未知（null）”，stale 标“已过期，值未采用”，failed 阶段显示醒目提示且不附情报。扫描文本全部转义（HTML 与 Markdown 特殊字符），证据放入比内部反引号更长的代码围栏，不能注入标记。`scan --output markdown` 报错 2。
 
-### 11.2 退出码
+阶段状态：
 
-| 退出码 | 含义 |
-|---|---|
-| 0 | 扫描成功且质量门禁未触发 |
-| 1 | 扫描成功，但新 Finding 达到门禁阈值 |
-| 2 | 输入、配置或契约错误 |
-| 3 | 扫描后端不可用或执行失败（GA 前统一） |
-| 4 | 输出/SARIF/文件写入失败（GA 前统一） |
+| 情形 | status / reason | Finding 数据 |
+|---|---|---|
+| 无 Finding 带 CVE | skipped / no_queryable_cve；不打开缓存 | 逐条 not_applicable |
+| 仅非法 CVE | partial / no_queryable_cve；不打开缓存 | invalid_input |
+| 全部 enriched 或 not_applicable | complete | 附情报 |
+| 有 stale / unknown / partial / invalid_input | partial / intel_incomplete | 附情报与缺失原因 |
+| 模块不可导入 | failed / module_unavailable | 原样，不加元数据 |
+| 缓存不存在 | failed / cache_not_found | 原样 |
+| 非 SQLite、损坏、缺表、行不可解码 | failed / cache_unreadable | 原样 |
+| schema 版本不等于 1 | failed / cache_schema_mismatch | 原样 |
 
-所有非零退出仍应尽可能输出合法诊断；门禁退出码 1 必须保留完整报告。
+漏洞模块版本要求：结构化原因依赖 `EnrichmentCacheError` 与分块查询，已于 2026-09-24 提交为漏洞模块 dcb2f29（2026-09-24 推送）。对已提交的 554c247（仅 C1）实测：缓存缺失/损坏仍为 cache_not_found/cache_unreadable；schema 不匹配会报成 cache_unreadable；不可解码行原先会以 JSONDecodeError 崩溃，Code 适配层已改为捕获 sqlite3/ValueError 并报 cache_unreadable，其他异常仍抛出。CI 已锁定 dcb2f29 完整 SHA。
 
-## 12. 可观测性与运维
+退出码（ADR-006）：0 成功（含 partial/failed 的非严格模式，状态写在报告里）；1 扫描门禁触发（优先于 3）；2 参数、输入、envelope 校验或写文件失败，stdout 为空、不写输出文件；3 `--require-intel` 且阶段 partial/failed（仍输出完整报告）。门禁阈值：显式 `--fail-on` 优先，否则沿用输入 `summary.gate.threshold`；`--fail-on none` 本次不据门禁返回 1，但保留记录的 `summary.gate`。
 
-- 每次扫描生成 request/scan ID。
-- 记录版本、规则版本、后端、扫描文件数、Finding 数、耗时和降级原因。
-- 指标不得包含源码和敏感值。
-- 健康检查区分 `ok`、`degraded`、`unavailable`。
-- 对 LLM 记录调用数、token、缓存命中和失败分类，不记录未脱敏 prompt。
-- 提供日志级别并默认关闭 debug 原始响应。
-- 发布必须提供回滚到上一版本及上一规则包的方法。
+`--output-file`（scan 与 enrich 统一）：写入该文件，stdout 只输出解析后的绝对路径；同目录临时文件后 `os.replace` 原子覆盖已有文件，失败不截断旧文件；目标为目录时报错 2；enrich 的输出路径不得等于输入 envelope。修复前 scan 的 JSON 模式静默忽略此参数（C0 记录）；现在 `scan --json --output-file` 与不带 `--json` 时都写 envelope 文件，SARIF 行为不变。
 
-## 13. 测试与质量门禁
+不做：CVE 情报不改变 severity，不做评分；模型推测与 CVE 情报在 JSON 中位于不同 metadata 键（`llm_triage` 与 `code_audit_enrichment`），情报存在不证明可利用。
 
-每个合并请求至少执行：
+## 7. 性能、安全与配置
 
-1. Python 全量 pytest，使用明确 `PYTHONPATH=src;.python-deps` 和独立 basetemp。
-2. Node/Vitest 上游回归。
-3. ESLint 与 TypeScript typecheck。
-4. tree-sitter binding 和五语言 parser smoke。
-5. builtin 与真实固定版本 Opengrep smoke。
-6. SARIF schema 验证。
-7. envelope 和 shared contract 测试。
-8. secret/path/subprocess/prompt-injection 安全回归。
-9. Windows 与 Ubuntu matrix。
+- 路径筛选、忽略文件、文件大小与超时沿用现有扫描配置；新增限制须有清晰错误，不静默漏扫。
+- LLM 默认可关闭；发送源码前遵循现有数据策略，只发送必要上下文，不读取工作区秘密。
+- 后端工具路径与参数采用现有安全调用方式；缺 Opengrep 时显式报告实际后端，不能假装执行成功。
+- 缓存区分采集时间、有效期、缺失与失败；网络刷新是后续显式行为，第一轮不增加后台刷新。
+- 规则版本、引擎版本、配置与样本版本写入可复现记录；质量数字必须指明标注集、TP/FP/FN 与样本规模。
 
-测试不得访问真实 LLM；真实 provider E2E 必须 opt-in、限额并与普通 CI 分离。
+## 8. 验收矩阵
 
-## 14. CI/CD 与发布
+历史基线：Python 185、TypeScript 586 项通过（TS 2 跳过）；漏洞模块 184 项通过。详见 [验证说明](../../docs/VALIDATION.md)。
 
-### 14.1 Pull Request
+C1 必测：字段深度保真/输入不变、无 CVE、格式错误、空/过期缓存、未知 provider、重复 CVE 多 Finding、非法 source、网络被阻断。模块旧 `002` 契约回归必须继续通过。
+C1 现场结果（2026-09-23）见 [TODO](TODO.md) C1 完成证据；断网测试在 socket 层阻断全部连接（含 loopback，因本机 HTTP(S) 代理走 127.0.0.1）并断言命中/过期/缺失零请求。
 
-- 运行全量质量门禁。
-- 对 PR 使用 Git diff 扫描。
-- 应用已提交 baseline，仅对新增 Finding 失败。
-- 无论门禁是否失败都上传 SARIF artifact。
-- 仅可信、非 fork 上下文允许向 Code Scanning 上传。
+C2 必测：关闭增强与旧快照一致，开启后的 JSON/报告样例，部分失败保留扫描门禁，Unicode/绝对路径，未知字段往返。
+C2 覆盖：`tests/test_cli_enrich.py`（真实子进程，三种格式、退出码优先级、文件输出、SARIF 运行级阶段五种情形；子进程经 sitecustomize 阻断 socket/DNS/httpx，代理变量指向失效的 127.0.0.1:9，并断言守卫日志为空）、`tests/test_markdown_report.py`（渲染与注入转义）、`tests/test_cve_intel_adapter_errors.py`（旧版 store 异常映射）与根 `tests/test_suite_code_enrich.py`（经 suite.py）。
 
-### 14.2 发布
+测试入口（两种范围）：
 
-- 使用语义版本、CHANGELOG 和 release notes。
-- 从干净 tag 构建，不从开发者工作目录发布。
-- 生成 wheel/sdist、CLI smoke、SBOM、checksum 和签名。
-- 发布候选需经过 Windows/Linux 安装测试。
-- 任何冻结契约变更必须停止发布并走独立兼容性评审。
+- `python scripts/run_python_tests.py --scope unit`：仅 Code；带 `vuln_integration` 标记的测试 deselected（不计 skip/pass），不需要漏洞模块。
+- `python scripts/run_python_tests.py --scope integration`：追加 `modules/vulnerability-analysis/src` 并传 `--vuln-integration`；模块不可导入或不来自该目录时 pytest 以 usage error（退出 4）失败，不跳过。
+- 两者都以 `-o addopts=`、系统临时目录下新 basetemp 运行，环境变量只作用于 pytest 进程及其子进程；CI 见 `.github/workflows/ci.yml` 的 `python-tests`（Python 3.11/3.12，unit 与 integration 两步；2026-09-24 在 f91b506 上远程通过）。该作业的 `VULN_MODULE_REF` 已锁定 dcb2f291301129df257bdf48baf90ca694174a39（已推送）。shared-llm-core 仍检出 master，未锁 SHA；CI 未检出 000shared-integration，相关 2 项测试显式跳过。
 
-## 15. 部署模式
+C3 必测：固定正反例语料、真实授权项目回归、误报抽查、修复前后 diff/baseline；不做未经测量的准确率承诺。
 
-| 模式 | 源码位置 | LLM | 支持目标 |
-|---|---|---|---|
-| Local/CI | 客户机器或 runner | 关闭/可选 | Beta 必须 |
-| Private hybrid | 客户机器 | 客户配置 provider | RC 必须 |
-| Air-gapped | 完全离线 | 本地 provider 或关闭 | GA 后按客户需求 |
-| SaaS control plane | 客户可控 | 明确同意后 | 当前不实施 |
+C3 第一阶段（2026-09-24，提交 5a5f0bb，合并 main 后推送，远程 CI 通过；builtin 指标在合并 main 5d4d60c 后重测，见 [c3-quality-and-demo.md](c3-quality-and-demo.md)）：
 
-## 16. 商用验收 Gate
+- 质量基线 `benchmarks/c3/quality.py`：Python 合成语料 `benchmarks/c3/corpus` + 人工标注 `labels.json`（逐例理由、规则声明的 CWE 范围）；经 `scan_payload` 按规则计 TP/FP/FN/TN、范围外、unsupported、错误，分母为零输出 null；`result` 段确定性。退出码（验收修复后）：0 成功且重复一致，4 任一所选后端失败（含 Opengrep 执行前 pin 校验失败，不启动），3 重复不一致，2 用法/标注/写报告错误，优先级 2>4>3>0。Opengrep 路径由 `benchmarks/c3/opengrep_pin.py` 按原始字节 SHA-256 对照 OPENGREP.lock 门禁（质量脚本与演示共用）。仅是合成样例回归基线。
+- 规则变更：`CG-OG-PY-001` 增加 source `sys.argv`、sink `exec(...)`（仅影响 Python opengrep/auto 后端）。
+- 交付演示 `scripts/c3_demo.py`：运行真实 CLI（Python 层网络拦截；git/Opengrep 原生子进程网络未验证）完成扫描 → 基线 → 修复 → 复查（全量/基线/diff），导出 JSON/SARIF/Markdown，合成 CVE envelope + 演示临时缓存 enrich；不依赖根 suite.py。
+- 测试 `tests/test_c3_quality.py`；范围、结果、原因分析、依赖与未验证项见 [c3-quality-and-demo.md](c3-quality-and-demo.md)。
 
-### 16.1 Beta Gate
+## 9. 发布与下一步
 
-- canonical CLI 和 Gateway 统一。
-- GitHub Actions Windows/Linux 全绿。
-- Python/Node/lint/typecheck 全绿。
-- 固定 Opengrep 下载、摘要验证和离线 fallback 完成。
-- 安装、配置、升级、回滚和故障排查文档完成。
-- P0 安全测试完成，无已知 critical/high 产品漏洞。
-
-### 16.2 RC Gate
-
-- precision/recall 达标并有可重复报告。
-- 规则包、SBOM、许可证清单和依赖漏洞扫描完成。
-- 真实 provider opt-in E2E 通过，成本上限验证完成。
-- IntegrationGateway E2E、SARIF 上传和门禁真实仓库验证完成。
-- 性能、故障注入和大仓库测试完成。
-
-### 16.3 GA Gate
-
-- RC 稳定期内无未解决 P0/P1 缺陷。
-- 发布 artifact 可复现、带 checksum、签名和 provenance。
-- 数据处理、保留、删除和客户配置说明完成。
-- 支持矩阵、SLA/SLO、升级和回滚政策正式发布。
-- 安全响应与漏洞披露流程建立。
-
-## 17. 后续实施顺序
-
-1. 统一 CLI/Gateway 和错误契约。
-2. 修复 CI/typecheck，交付可重复 Windows/Linux workflow。
-3. 固定 Opengrep 安装、校验和规则版本。
-4. 扩展并量化规则质量。
-5. 完成 SBOM、许可证、secret scan 和发布工程。
-6. 完成真实 provider 与性能/故障验收。
-7. benchmark 证明必要后，再决定是否实施 Joern deep backend。
-
-详细 issue、依赖和完成定义见 [TODO.md](./TODO.md)。
+优先交付可安装 CLI + 报告样例 + 复现脚本，随后做 CI 使用说明和小范围试用。产品和漏洞模块分别提交；发布记录写明两个提交版本和契约版本。
+任务见 [TODO](TODO.md)，其他模型从 [交接指南](../../docs/MODEL-HANDOFF.md) 的 C0/C1 开始。

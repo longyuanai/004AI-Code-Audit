@@ -1,3 +1,28 @@
+> 2026-09-23 重组：能力归属见 [CAPABILITIES.md](CAPABILITIES.md)，启动入口见父目录 README。以下保留原项目说明。
+
+## 当前开发文档（2026-09-23）
+
+当前技术规范见 [docs/tech-spec.md](docs/tech-spec.md)，任务见 [docs/TODO.md](docs/TODO.md)，跨项目交接见 [根模型指南](../docs/MODEL-HANDOFF.md)。下文保留原仓使用说明；旧目录编号、旧状态与旧商业计划以当前技术规范为准。包名和 API 来源保持兼容。
+
+### Python CLI：扫描 + 离线 CVE 增强（C2，2026-09-23 本机验证）
+
+在套件根目录（PowerShell）：
+
+```powershell
+$pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python314\python.exe"  # 按本机 Python 3.11+ 实际位置调整
+# 1. 扫描并保存 envelope（--output-file 写文件，stdout 只打印路径；门禁退出码不变）
+& $pythonExe .\suite.py code audit -- scan --json --repo-path 'D:\授权样本' --fail-on high --output-file 'D:\结果\scan.json'
+# 2. 只读本地漏洞缓存做离线增强；不联网、不调用 LLM
+& $pythonExe .\suite.py code audit -- enrich --envelope 'D:\结果\scan.json' --output-file 'D:\结果\enriched.json'
+# 可选：--cache <目录或 .sqlite3>、--output sarif|markdown、--fail-on <级别>、--require-intel（情报 partial/failed 时退出 3）
+& $pythonExe .\suite.py code audit -- enrich --envelope 'D:\结果\scan.json' --output markdown --output-file 'D:\结果\报告.md'
+```
+
+退出码：0 成功、1 门禁触发、2 输入/输出错误、3 `--require-intel` 且情报不完整。阶段状态与字段见 [tech-spec §6](docs/tech-spec.md)。当前 Python 静态规则不产生 CVE，真实扫描的增强阶段通常为 skipped。
+
+Python 测试：`& $pythonExe .\scripts\run_python_tests.py --scope unit`（仅本产品）或 `--scope integration`（必须带唯一漏洞模块，缺失即失败）。
+
+
 # AI-CodeGuard
 
 > A TypeScript-based code security CLI that combines Stage 1 static pre-filtering with optional Stage 2 LLM confirmation.
