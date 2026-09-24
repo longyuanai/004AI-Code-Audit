@@ -114,6 +114,11 @@ def finding_to_result(finding: Mapping[str, Any]) -> dict[str, Any]:
     code_flows = _sarif_code_flows(metadata.get("code_flows"))
     if code_flows:
         result["codeFlows"] = code_flows
+    # Offline CVE intel (C2) is copied verbatim, including null unknowns.
+    intel = metadata.get("code_audit_enrichment")
+    properties = result["properties"]
+    if isinstance(intel, Mapping) and isinstance(properties, dict):
+        properties["longyuanai:cve-intel"] = dict(intel)
     return result
 
 
@@ -121,24 +126,27 @@ def export_sarif(
     findings: Iterable[Mapping[str, Any]],
     *,
     tool_version: str = "0.6",
+    run_properties: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    run: dict[str, Any] = {
+        "tool": {
+            "driver": {
+                "name": "longyuanai-codeguard",
+                "version": tool_version,
+                "informationUri": (
+                    "https://github.com/hzj-Jeff-07/AI-CodeGuard"
+                ),
+            }
+        },
+        "results": [finding_to_result(item) for item in findings],
+    }
+    # Omitted when empty so plain scan SARIF stays byte-for-byte compatible.
+    if run_properties:
+        run["properties"] = dict(run_properties)
     return {
         "version": SARIF_VERSION,
         "$schema": SARIF_SCHEMA_URL,
-        "runs": [
-            {
-                "tool": {
-                    "driver": {
-                        "name": "longyuanai-codeguard",
-                        "version": tool_version,
-                        "informationUri": (
-                            "https://github.com/hzj-Jeff-07/AI-CodeGuard"
-                        ),
-                    }
-                },
-                "results": [finding_to_result(item) for item in findings],
-            }
-        ],
+        "runs": [run],
     }
 
 

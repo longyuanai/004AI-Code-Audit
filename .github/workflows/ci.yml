@@ -37,6 +37,78 @@ jobs:
       - name: Run tests
         run: npm run test:run
 
+  # Python product tests in two explicit scopes. The single
+  # vulnerability-analysis module is an independently versioned repository,
+  # checked out at a pinned ref into modules/ exactly as in the local suite
+  # layout; shared-llm-core sits next to this repository.
+  python-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    env:
+      # C2 store (EnrichmentCacheError, chunked queries): 002AI-Vulnerability-
+      # Agent dcb2f29 on agent/commercial-docs. The commit must be pushed
+      # before this job can check it out.
+      VULN_MODULE_REF: dcb2f291301129df257bdf48baf90ca694174a39
+      SHARED_LLM_CORE_REF: master
+    steps:
+      - name: Require a pinned vulnerability-analysis commit
+        run: |
+          if [ -z "$VULN_MODULE_REF" ]; then
+            echo "::error::VULN_MODULE_REF is not pinned: commit and push the C2 store changes of 002AI-Vulnerability-Agent, then set its SHA"
+            exit 1
+          fi
+
+      - name: Checkout Code Audit
+        uses: actions/checkout@v4
+        with:
+          path: 002AI-Code-Audit
+
+      - name: Checkout shared-llm-core
+        uses: actions/checkout@v4
+        with:
+          repository: longyuanai/000shared-llm-core
+          ref: ${{ env.SHARED_LLM_CORE_REF }}
+          path: 000shared-llm-core
+          token: ${{ secrets.SUITE_CHECKOUT_TOKEN || github.token }}
+
+      - name: Checkout vulnerability-analysis module
+        uses: actions/checkout@v4
+        with:
+          repository: longyuanai/002AI-Vulnerability-Agent
+          ref: ${{ env.VULN_MODULE_REF }}
+          path: 002AI-Code-Audit/modules/vulnerability-analysis
+          token: ${{ secrets.SUITE_CHECKOUT_TOKEN || github.token }}
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install test dependencies
+        # Mirrors the pins in pyproject.toml files; no product package is
+        # installed, the runner sets PYTHONPATH to the checked-out sources.
+        run: >
+          python -m pip install
+          "pytest>=8.2,<10" "jsonschema>=4.26,<5"
+          "tree-sitter>=0.25,<0.27" "tree-sitter-cpp==0.23.4"
+          "tree-sitter-python==0.25.0" "tree-sitter-go==0.25.0"
+          "tree-sitter-java==0.23.5" "tree-sitter-typescript==0.23.2"
+          "httpx>=0.27,<0.28" "pydantic>=2.7,<3" "pyyaml>=6.0.1,<7"
+          "tenacity>=8.3,<9" "python-dotenv>=1.0.1,<2" "jinja2>=3.1.4,<4"
+          "click>=8.1.7,<9" "rich>=13.7.1,<14" "defusedxml>=0.7.1,<0.8"
+          "fastapi>=0.139.2,<0.140.0" "uvicorn>=0.51,<1.0"
+
+      - name: Unit scope (product only; integration tests deselected)
+        working-directory: 002AI-Code-Audit
+        run: python scripts/run_python_tests.py --scope unit
+
+      - name: Integration scope (module required; missing module fails)
+        working-directory: 002AI-Code-Audit
+        run: python scripts/run_python_tests.py --scope integration
+
   # Smoke-tests the composite action itself (action.yml), which the unit
   # suite cannot cover: vulnerable fixtures must yield findings and a valid
   # SARIF file; safe fixtures must yield zero findings and exit 0.

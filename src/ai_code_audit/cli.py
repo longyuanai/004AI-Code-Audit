@@ -425,16 +425,48 @@ def build_parser() -> argparse.ArgumentParser:
         prog="ai-code-audit",
         description="Multi-language code audit with JSON or SARIF output.",
     )
-    parser.add_argument("command", nargs="?", choices=("scan",))
+    parser.add_argument("command", nargs="?", choices=("scan", "enrich"))
     parser.add_argument("--input", help="One JSON payload object.")
     parser.add_argument("--json", action="store_true")
-    parser.add_argument("--output", choices=("envelope", "sarif"), default="envelope")
-    parser.add_argument("--output-file")
+    parser.add_argument(
+        "--output",
+        choices=("envelope", "sarif", "markdown"),
+        default="envelope",
+        help="markdown is only available for enrich",
+    )
+    parser.add_argument(
+        "--output-file",
+        help=(
+            "Write the JSON/SARIF document to this file (overwritten "
+            "atomically); stdout then carries only the resolved path."
+        ),
+    )
     parser.add_argument("--repo-path")
     parser.add_argument("--git-url")
     parser.add_argument(
         "--fail-on",
         choices=("none", "any", "info", "low", "medium", "high", "critical"),
+    )
+    enrich = parser.add_argument_group(
+        "enrich",
+        "Offline CVE enrichment of a saved source 004 envelope; reads the "
+        "local vulnerability cache only, never the network.",
+    )
+    enrich.add_argument(
+        "--envelope",
+        help="Scan envelope JSON file to enrich, or '-' for stdin.",
+    )
+    enrich.add_argument(
+        "--cache",
+        help=(
+            "Vulnerability enrichment cache (directory or .sqlite3 file); "
+            "defaults to the vulnerability module's cache location."
+        ),
+    )
+    enrich.add_argument(
+        "--require-intel",
+        action="store_true",
+        help="Exit 3 when the enrichment stage is partial or failed.",
     )
     return parser
 
@@ -442,6 +474,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     _configure_utf8_streams()
     args = build_parser().parse_args(argv)
+    if args.command == "enrich":
+        return _enrich_main(args)
+    for option in ("envelope", "cache", "require_intel"):
+        if getattr(args, option):
+            flag = "--" + option.replace("_", "-")
+            return _input_error(f"{flag} is only valid with enrich", args.json)
+    if args.output == "markdown":
+        return _input_error("--output markdown is only valid with enrich", args.json)
     if args.output == "sarif" and args.json:
         return _input_error("--json cannot be combined with --output sarif", False)
     if args.output == "sarif" and not args.output_file:
@@ -460,9 +500,22 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.output == "sarif":
         document = export_sarif(envelope["findings"])
-        output_path = Path(args.output_file).expanduser().resolve()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(render_sarif(document), encoding="utf-8")
+        try:
+            output_path = _write_output(args.output_file, render_sarif(document))
+        except OSError as error:
+            return _input_error(f"cannot write --output-file: {error}", False)
+        print(str(output_path))
+        return _gate_exit_code(envelope)
+    if args.output_file:
+        # The envelope goes to the file (previously this flag was ignored).
+        try:
+            output_path = _write_output(
+                args.output_file, render_envelope(envelope) + "\n"
+            )
+        except OSError as error:
+            return _input_error(
+                f"cannot write --output-file: {error}", args.json
+            )
         print(str(output_path))
         return _gate_exit_code(envelope)
     if args.json:
@@ -474,6 +527,135 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"found {len(envelope['findings'])} issue(s)."
         )
     return _gate_exit_code(envelope)
+
+
+MAX_ENVELOPE_BYTES = 64 * 1024 * 1024
+EXIT_INTEL_INCOMPLETE = 3
+
+
+def _enrich_main(args: argparse.Namespace) -> int:
+    """Offline enrichment; exit 0 ok, 1 gate, 2 input/output, 3 strict."""
+    from ai_code_audit.cve_intel import (
+        CodeIntelBridgeError,
+        run_offline_enrichment,
+    )
+
+    for option in ("input", "repo_path", "git_url"):
+        if getattr(args, option):
+            flag = "--" + option.replace("_", "-")
+            return _input_error(f"{flag} is not valid with enrich", False)
+    if not args.envelope:
+        return _input_error("enrich requires --envelope FILE or -", False)
+    if args.output == "sarif" and not args.output_file:
+        return _input_error("--output-file is required for SARIF output", False)
+    try:
+        payload, source_path = _read_envelope(args.envelope)
+        if args.output_file and source_path is not None and (
+            Path(args.output_file).expanduser().resolve() == source_path
+        ):
+            raise CLIInputError(
+                "--output-file must differ from --envelope; the original "
+                "scan result is never overwritten"
+            )
+        threshold = _enrich_threshold(payload, args.fail_on)
+        outcome = run_offline_enrichment(payload, cache_path=args.cache)
+    except (CLIInputError, CodeIntelBridgeError) as error:
+        return _input_error(str(error), False)
+
+    document = outcome.document
+    gate_triggered = False
+    if threshold != "none":
+        _apply_gate(document, threshold)
+        gate_triggered = _gate_exit_code(document) == 1
+    stage = outcome.stage
+    counts = ", ".join(
+        f"{name}={count}" for name, count in stage["status_counts"].items()
+    )
+    print(
+        f"CVE enrichment {stage['status']}"
+        + (f" ({stage['reason']})" if stage["reason"] else "")
+        + f": {stage['findings']} finding(s), {stage['cves']} CVE(s)"
+        + (f"; {counts}" if counts else "")
+        + (f"; {stage['error']}" if stage["error"] else ""),
+        file=sys.stderr,
+    )
+    if args.output == "sarif":
+        # The stage record rides on the run, so a failed/skipped stage is
+        # visible even when no result carries per-finding intel.
+        text = render_sarif(
+            export_sarif(
+                document["findings"],
+                run_properties={"longyuanai:cve-intel-stage": stage},
+            )
+        )
+    elif args.output == "markdown":
+        from ai_code_audit.output.markdown import render_enrichment_markdown
+
+        text = render_enrichment_markdown(document)
+    else:
+        text = render_envelope(document) + "\n"
+    if args.output_file:
+        try:
+            output_path = _write_output(args.output_file, text)
+        except OSError as error:
+            return _input_error(f"cannot write --output-file: {error}", False)
+        print(str(output_path))
+    else:
+        sys.stdout.write(text)
+    if gate_triggered:
+        return 1
+    if args.require_intel and outcome.status in {"partial", "failed"}:
+        return EXIT_INTEL_INCOMPLETE
+    return 0
+
+
+def _read_envelope(raw: str) -> tuple[object, Path | None]:
+    if raw == "-":
+        data = sys.stdin.buffer.read(MAX_ENVELOPE_BYTES + 1)
+        source: Path | None = None
+    else:
+        source = Path(raw).expanduser().resolve()
+        if not source.is_file():
+            raise CLIInputError(f"--envelope file not found: {source}")
+        try:
+            if source.stat().st_size > MAX_ENVELOPE_BYTES:
+                raise CLIInputError("--envelope exceeds the 64 MiB input limit")
+            data = source.read_bytes()
+        except OSError as error:
+            raise CLIInputError(f"cannot read --envelope: {error}") from error
+    if len(data) > MAX_ENVELOPE_BYTES:
+        raise CLIInputError("--envelope exceeds the 64 MiB input limit")
+    try:
+        return json.loads(data.decode("utf-8-sig")), source
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise CLIInputError(f"--envelope is not UTF-8 JSON: {error}") from error
+
+
+def _enrich_threshold(payload: object, override: str | None) -> str:
+    """Explicit --fail-on wins; otherwise keep the scan's recorded gate."""
+    if override is not None:
+        return override
+    summary = payload.get("summary") if isinstance(payload, Mapping) else None
+    gate = summary.get("gate") if isinstance(summary, Mapping) else None
+    recorded = gate.get("threshold") if isinstance(gate, Mapping) else None
+    if isinstance(recorded, str) and recorded in {"none", "any", *SEVERITY_RANK}:
+        return recorded
+    return "none"
+
+
+def _write_output(raw_path: str, text: str) -> Path:
+    """Replace ``raw_path`` atomically so a failed write never truncates it."""
+    output_path = Path(raw_path).expanduser().resolve()
+    if output_path.is_dir():
+        raise IsADirectoryError(f"{output_path} is a directory")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output_path.with_name(f".{output_path.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(text, encoding="utf-8", newline="\n")
+        os.replace(temporary, output_path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return output_path
 
 
 def _gate_exit_code(envelope: Mapping[str, object]) -> int:
