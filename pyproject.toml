@@ -27,6 +27,10 @@ tree-sitter-typescript = "0.23.2"
 [tool.poetry.group.dev.dependencies]
 jsonschema = "^4.26.0"
 pytest = "^8.2.0"
+# Used only by tests/integration/test_code_adapter_e2e.py, which was importing
+# them without declaring them anywhere; the test skips when they are absent.
+httpx = "^0.28"
+uvicorn = "^0.34"
 
 [build-system]
 requires = ["poetry-core"]
@@ -38,5 +42,13 @@ ai-code-audit = "ai_code_audit.cli:main"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["conftest.py", "test_*.py"]
-addopts = "--basetemp=.pytest-tmp"
-cache_dir = "C:/pytest-cache/004"
+# No --basetemp override: pointing it at a repo-relative directory put every
+# tmp_path *inside this project's own git work tree*, so the git-dependent
+# tests (gitutils, scanner diff, CLI diff input) ran against the wrong
+# repository and failed. pytest's default basetemp lives in the system temp
+# directory, outside any work tree.
+addopts = ""
+# Must stay repo-relative: an absolute Windows path here ("C:/...") makes
+# pytest create a literal directory named `C:` in the repo root on Linux and
+# macOS, which is not gitignored and gets committed by accident.
+cache_dir = ".pytest_cache"

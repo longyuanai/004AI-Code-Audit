@@ -99,8 +99,9 @@ node dist/index.js rules test ./custom-rules ./src --output json
 ### IntegrationGateway：扫描本地仓库 / Git URL
 
 Python v0.6 adapter CLI 输出 shared-integration 可直接消费的 Finding
-JSON envelope。Windows 下请使用与 bundled tree-sitter binding 匹配的
-Python 3.14：
+JSON envelope。需要 **Python 3.11+**（`pyproject.toml` 声明 `^3.11`，CI 覆盖
+3.11 / 3.12）。若使用 `.python-deps/` 里预置的 tree-sitter wheel，请确保其
+ABI tag 与当前解释器一致；否则直接 `pip install` 对应版本即可：
 
 ```powershell
 $payload = '{"repo_path":"C:\\work\\service","languages":["python","go","java"]}'
@@ -125,6 +126,26 @@ payload 中也可直接使用 `{"git_url":"..."}`，供
 `shared_integration.adapters.CodeAdapter` 调用。支持 `rules` 过滤：
 `004-taint-source-to-sink` / `004-cross-function-dataflow`（也接受
 `taint` / `dataflow` 简写）。
+
+#### `git_url` scheme 白名单
+
+`git clone` 接受的远不止远程 URL：裸路径或 `file://` 会克隆扫描主机上的
+任意仓库，而 finding 的 `evidence` 会把命中的源码行回传给调用方。因此
+`git_url` 默认只允许 **`https`、`ssh`、`git+ssh`**（含 `git@host:owner/repo`
+scp 简写）；`file://`、裸路径、`http://`、`git://`、`ext::<command>` 一律拒绝。
+
+被拒绝的 scheme 是**输入错误**，不会降级到 `repo_path` 回退——回退只针对
+clone 失败。
+
+需要放宽时用 `CODEGUARD_GIT_ALLOWED_SCHEMES` 显式声明（逗号分隔，覆盖默认值）：
+
+```bash
+# 允许本地镜像
+CODEGUARD_GIT_ALLOWED_SCHEMES=https,ssh,file \
+  python -m ai_code_audit scan --git-url file:///srv/mirror/service.git --json
+```
+
+注意这是 scheme 层面的控制，不做主机白名单：`https://` 指向内网地址仍会放行。
 
 ### 可插拔静态分析后端
 

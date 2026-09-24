@@ -71,7 +71,7 @@ def test_opengrep_json_locations_are_normalized_to_corpus_paths(
 
 
 def test_builtin_phase0_baseline_exposes_dataflow_limit(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     expectations = load_expectations()
     reported, elapsed, version = run_builtin()

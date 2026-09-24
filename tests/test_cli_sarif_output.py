@@ -24,7 +24,7 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_cli_writes_valid_sarif_file(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
     tmp_path: Path,
 ) -> None:
     output_file = tmp_path / "report.sarif"
@@ -48,7 +48,7 @@ def test_cli_writes_valid_sarif_file(
 
 
 def test_cli_json_preserves_v05_envelope(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     result = _run_cli(
         "scan",
@@ -64,7 +64,7 @@ def test_cli_json_preserves_v05_envelope(
 
 
 def test_cli_sarif_requires_output_file(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     result = _run_cli(
         "scan",

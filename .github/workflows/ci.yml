@@ -37,11 +37,13 @@ jobs:
       - name: Run tests
         run: npm run test:run
 
-  # Python product tests in two explicit scopes. The single
-  # vulnerability-analysis module is an independently versioned repository,
-  # checked out at a pinned ref into modules/ exactly as in the local suite
-  # layout; shared-llm-core sits next to this repository.
+  # Python product tests in two explicit scopes. The Python half of this repo
+  # previously had no CI coverage (every workflow ran only npm tests). The
+  # single vulnerability-analysis module is an independently versioned
+  # repository, checked out at a pinned ref into modules/ exactly as in the
+  # local suite layout; shared-llm-core sits next to this repository.
   python-tests:
+    name: pytest (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -49,8 +51,7 @@ jobs:
         python-version: ['3.11', '3.12']
     env:
       # C2 store (EnrichmentCacheError, chunked queries): 002AI-Vulnerability-
-      # Agent dcb2f29 on agent/commercial-docs. The commit must be pushed
-      # before this job can check it out.
+      # Agent dcb2f29 on agent/commercial-docs (pushed 2026-09-24).
       VULN_MODULE_REF: dcb2f291301129df257bdf48baf90ca694174a39
       SHARED_LLM_CORE_REF: master
     steps:
@@ -88,9 +89,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install test dependencies
-        # Mirrors the pins in pyproject.toml files; no product package is
-        # installed, the runner sets PYTHONPATH to the checked-out sources.
+        # Installed with pip rather than `poetry install` because pyproject
+        # declares shared-llm-core as a path dependency. Mirrors the pins in
+        # pyproject.toml files; no product package is installed, the runner
+        # sets PYTHONPATH to the checked-out sources.
         run: >
+          python -m pip install --upgrade pip &&
           python -m pip install
           "pytest>=8.2,<10" "jsonschema>=4.26,<5"
           "tree-sitter>=0.25,<0.27" "tree-sitter-cpp==0.23.4"
@@ -100,6 +104,11 @@ jobs:
           "tenacity>=8.3,<9" "python-dotenv>=1.0.1,<2" "jinja2>=3.1.4,<4"
           "click>=8.1.7,<9" "rich>=13.7.1,<14" "defusedxml>=0.7.1,<0.8"
           "fastapi>=0.139.2,<0.140.0" "uvicorn>=0.51,<1.0"
+
+      - name: Configure git identity for repository fixtures
+        run: |
+          git config --global user.email "ci@example.invalid"
+          git config --global user.name "CI"
 
       - name: Unit scope (product only; integration tests deselected)
         working-directory: 002AI-Code-Audit

@@ -54,9 +54,8 @@ ai-codeguard/
 ├── src/
 │   ├── analyzer/
 │   │   ├── index.ts
-│   │   └── providers/
-│   │       ├── claude.ts
-│   │       └── openai.ts
+│   │   ├── router.ts          # provider selection via shared_llm_core
+│   │   └── providers/         # v2 adapters only (Python, router-backed)
 │   ├── cli/
 │   │   ├── index.ts
 │   │   └── commands/
@@ -102,6 +101,8 @@ ai-codeguard/
 │       ├── finding.ts
 │       ├── rule.ts
 │       └── index.ts
+├── contracts/
+│   └── sarif.json             # 跨栈输出契约，TS/Python 两侧测试各自校验
 ├── docs/
 ├── tests/
 ├── README.md

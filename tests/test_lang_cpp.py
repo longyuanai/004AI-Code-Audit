@@ -8,7 +8,7 @@ SAMPLES = ROOT / "samples" / "cpp"
 
 
 def test_cpp_adapter_extracts_function_and_class(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     adapter = CppLanguageAdapter()
     tree = adapter.parser().parse((SAMPLES / "demo.cpp").read_bytes())
@@ -22,7 +22,7 @@ def test_cpp_adapter_extracts_function_and_class(
 
 
 def test_cpp_buggy_fixture_produces_taint_finding(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     result = scan_repository(SAMPLES, ["cpp"])
 

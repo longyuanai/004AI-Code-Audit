@@ -1,6 +1,6 @@
 # C3 第一阶段：质量基线与可复现交付样例
 
-日期：2026-09-24。状态：本机源码运行验证（Windows，Python 3.14.6），未提交、未推送、未在干净环境安装验证，不是 GA。
+日期：2026-09-24。状态：本机源码运行验证（Windows，Python 3.14.6）；C3 提交 5a5f0bb 并与 main 合并后推送，远程 CI 结果见 PR；未在干净环境安装验证，不是 GA。
 
 ## 1. 评测范围
 
@@ -24,6 +24,8 @@
 | builtin | 004-phase2-taint | 6 | 4 | 1 | 5 | 0 | 60.0% | 85.7% |
 | opengrep | CG-OG-PY-001（修复后） | 5 | 0 | 0 | 9 | 0 | 100.0% | 100.0% |
 | opengrep | CG-OG-PY-001（修复前） | 3 | 0 | 2 | 8* | 0 | 100.0% | 60.0% |
+
+**合并 main 后（2026-09-24，含 main 5d4d60c 扫描器修复）**：语料与标注未改，builtin 重测为 TP 5 / FP 2 / FN 2 / TN 7（P 71.4%、R 71.4%），opengrep 不变。变化原因：main 在匹配前清空注释与字符串，PY-FP-03（注释）、PY-FP-04（字符串）不再误报；sink 只与同一函数内的 source 配对，PY-CI-02（`os.getenv`，builtin 本就不认作 source）此前是借同文件另一函数的 `input()` 偶然命中，现为 FN。builtin 命中现为 medium/0.5，演示门禁因此由 high 改为 medium（opengrep 命中为 high，仍会触发）。三次重复一致，两种后端演示全部检查通过。
 
 \* 修复前语料尚无 PY-FP-06，安全行为 8。opengrep 修复后的 100% 是**样本内**结果：该语料同时用于发现并验证修复，不能外推。
 
@@ -90,10 +92,10 @@ $env:PYTHONPATH = "src;..\000shared-llm-core\src;.python-deps;."
 
 | 步骤 | 命令要点 | 预期退出码 | 输出 |
 |---|---|---:|---|
-| 修复前扫描 | `scan --json --input {repo_path, backend, fail_on: high} --output-file` | 1（门禁） | reports/before.json |
+| 修复前扫描 | `scan --json --input {repo_path, backend, fail_on: medium} --output-file` | 1（门禁） | reports/before.json |
 | 修复前 SARIF | `scan --output sarif --input … --output-file` | 1 | reports/before.sarif |
 | 写基线 | payload `write_baseline: .codeguard/baseline.json`（必须位于被扫仓库内，随 after 提交保留） | 1 | project/.codeguard/baseline.json |
-| 真实扫描的 Markdown | `enrich --envelope before.json --cache <不存在的临时路径> --output markdown` | 1（沿用输入门禁 high） | reports/before.md：`skipped` / `no_queryable_cve`，逐条 `not_applicable`，缓存未创建 |
+| 真实扫描的 Markdown | `enrich --envelope before.json --cache <不存在的临时路径> --output markdown` | 1（沿用输入门禁 medium） | reports/before.md：`skipped` / `no_queryable_cve`，逐条 `not_applicable`，缓存未创建 |
 | 修复后扫描 | 同上 | 1 | reports/after.json：calculator.py 消失，admin.py 新问题出现 |
 | 基线复查 | payload `baseline_path` | 1 | 仅 admin.py；summary.baselined 记录被基线接受的条数 |
 | diff 复查 | payload `diff: {base: HEAD~1, head: HEAD}` | 1 | 仅变更行上的 admin.py |
@@ -119,8 +121,8 @@ $env:PYTHONPATH = "src;..\000shared-llm-core\src;.python-deps;."
 
 | 需要 | 版本 | 说明 |
 |---|---|---|
-| 002AI-Code-Audit | 3e5fe6f + 本轮未提交文件 | C3 文件均未提交：benchmarks/c3、scripts/c3_demo.py、tests/test_c3_quality.py、规则修改、本文档 |
-| modules/vulnerability-analysis | dcb2f29 | 演示 enrich 与缓存写入；CI 已锁定该 SHA（均未推送） |
+| 002AI-Code-Audit | 5a5f0bb（C3）及其与 main 的合并提交 | benchmarks/c3、scripts/c3_demo.py、tests/test_c3_quality.py、规则修改、本文档 |
+| modules/vulnerability-analysis | dcb2f29 | 演示 enrich 与缓存写入；CI 已锁定该 SHA（已推送 agent/commercial-docs） |
 | 000shared-llm-core | 本机 aecaa9e（工作区另有既有未提交修改） | CI 作业检出 `master`，未锁定 SHA |
 | Python 依赖 | 本机 `.python-deps`（tree-sitter 绑定，未入库）与用户站点包 | CI 的安装清单见 `.github/workflows/ci.yml`，未在干净环境验证 |
 | git | 本机 | 演示的 diff 步骤需要 |

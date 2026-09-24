@@ -172,7 +172,7 @@ def test_opengrep_timeout_is_backend_execution_error(
 
 
 def test_auto_backend_falls_back_with_warning(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
     tmp_path: Path,
 ) -> None:
     (tmp_path / "app.py").write_text(

@@ -84,14 +84,19 @@ def test_builtin_ratchet_and_known_errors_are_stable() -> None:
 
     assert first["result"] == second["result"]
     rule = _rule(first, "builtin", "004-phase2-taint")
-    assert (rule["tp"], rule["fp"], rule["fn"], rule["tn"]) == (6, 4, 1, 5)
+    # Re-measured after merging main 5d4d60c (comments/strings blanked, sink
+    # paired only with a source in the same function); corpus and labels are
+    # unchanged. Before that fix: (6, 4, 1, 5) with PY-FP-03/04 as FPs and
+    # PY-CI-02 an accidental TP via an input() in another function.
+    assert (rule["tp"], rule["fp"], rule["fn"], rule["tn"]) == (5, 2, 2, 7)
     assert {item["case"] for item in rule["false_positives"]} == {
-        "PY-FP-01",  # constant eval after an unrelated input()
-        "PY-FP-03",  # eval( inside a comment
-        "PY-FP-04",  # system( inside a string literal
+        "PY-FP-01",  # constant eval after an input() in the same function
         "PY-FP-06",  # constant exec after sys.argv is read
     }
-    assert [item["case"] for item in rule["false_negatives"]] == ["PY-CI-05"]
+    assert [item["case"] for item in rule["false_negatives"]] == [
+        "PY-CI-02",  # os.getenv is not a builtin source
+        "PY-CI-05",  # sink function has no source in its own scope
+    ]
 
 
 def test_unavailable_opengrep_is_an_error_not_zero_findings(

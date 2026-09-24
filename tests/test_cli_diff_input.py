@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_cli_diff_payload_triggers_incremental_scan(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
     tmp_path: Path,
 ) -> None:
     repository = _repository(tmp_path)
@@ -41,7 +41,7 @@ def test_cli_diff_payload_triggers_incremental_scan(
 
 
 def test_cli_subprocess_accepts_diff_input(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
     tmp_path: Path,
 ) -> None:
     repository = _repository(tmp_path)

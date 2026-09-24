@@ -10,7 +10,7 @@ SAMPLES = ROOT / "samples" / "typescript"
 
 
 def test_typescript_adapter_extracts_function_and_class(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     adapter = TypeScriptLanguageAdapter()
     tree = adapter.parser().parse((SAMPLES / "app.ts").read_bytes())
@@ -21,7 +21,7 @@ def test_typescript_adapter_extracts_function_and_class(
 
 
 def test_tsx_grammar_parses_component(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     adapter = TypeScriptLanguageAdapter()
     tree = adapter.parser_for_extension(".tsx").parse(
@@ -33,7 +33,7 @@ def test_tsx_grammar_parses_component(
 
 
 def test_typescript_samples_find_only_unsafe_ts(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     result = scan_repository(SAMPLES, ["typescript"])
 

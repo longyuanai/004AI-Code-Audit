@@ -6,9 +6,13 @@ import time
 from collections.abc import Iterator
 from pathlib import Path
 
-import httpx
 import pytest
-import uvicorn
+
+# httpx and uvicorn are used only by this end-to-end gateway test and are not
+# declared in pyproject's dev dependencies, so guard them alongside the
+# sibling-checkout import below rather than failing collection.
+httpx = pytest.importorskip("httpx", reason="e2e gateway test needs httpx")
+uvicorn = pytest.importorskip("uvicorn", reason="e2e gateway test needs uvicorn")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -25,7 +29,12 @@ INTEGRATION_SRC = SUITE_ROOT / "000shared-integration" / "src"
 if str(INTEGRATION_SRC) not in sys.path:
     sys.path.insert(0, str(INTEGRATION_SRC))
 
-from shared_integration.gateway import build_gateway
+pytest.importorskip(
+    "shared_integration",
+    reason="requires the sibling 000shared-integration checkout",
+)
+
+from shared_integration.gateway import build_gateway  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -56,7 +65,7 @@ def gateway_18080() -> Iterator[str]:
 
 
 def test_post_scan_returns_findings(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
     gateway_18080: str,
 ) -> None:
     response = httpx.post(
@@ -76,7 +85,7 @@ def test_post_scan_returns_findings(
 
 
 def test_health_endpoint_reports_code_ok(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
     gateway_18080: str,
 ) -> None:
     response = httpx.get(

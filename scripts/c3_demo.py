@@ -188,10 +188,12 @@ class Demo:
         return document
 
     def payload(self, **extra: Any) -> dict[str, Any]:
+        # medium: builtin heuristic hits are medium/0.5 since main 5d4d60c;
+        # opengrep CG-OG-PY-001 hits are high, so both trigger the gate.
         return {
             "repo_path": str(self.repo),
             "backend": self.backend,
-            "fail_on": "high",
+            "fail_on": "medium",
             **extra,
         }
 

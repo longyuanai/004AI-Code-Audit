@@ -21,14 +21,14 @@ def test_high_gate_returns_one_and_preserves_json_envelope(
     _write_vulnerable_repo(tmp_path)
 
     result = _run_cli(
-        {"repo_path": str(tmp_path), "fail_on": "high"}, "--json"
+        {"repo_path": str(tmp_path), "fail_on": "medium"}, "--json"
     )
     envelope = json.loads(result.stdout)
 
     assert result.returncode == 1
     assert len(envelope["findings"]) == 1
     assert envelope["summary"]["gate"] == {
-        "threshold": "high",
+        "threshold": "medium",
         "triggered": True,
         "findings": 1,
     }
@@ -60,7 +60,7 @@ def test_baseline_filters_known_finding_before_gate(tmp_path: Path) -> None:
         {
             "repo_path": str(tmp_path),
             "baseline_path": ".codeguard-baseline.json",
-            "fail_on": "high",
+            "fail_on": "medium",
         },
         "--json",
     )
@@ -103,7 +103,7 @@ def test_sarif_is_written_even_when_gate_returns_one(tmp_path: Path) -> None:
     output = tmp_path / "report.sarif"
 
     result = _run_cli(
-        {"repo_path": str(tmp_path), "fail_on": "high"},
+        {"repo_path": str(tmp_path), "fail_on": "medium"},
         "--output",
         "sarif",
         "--output-file",
@@ -122,7 +122,7 @@ def test_fail_on_cli_flag_overrides_payload(tmp_path: Path) -> None:
         {"repo_path": str(tmp_path), "fail_on": "none"},
         "--json",
         "--fail-on",
-        "high",
+        "medium",
     )
 
     assert result.returncode == 1
@@ -165,6 +165,8 @@ def _run_cli(
 
 
 def _write_vulnerable_repo(root: Path) -> None:
+    # Builtin heuristic hits are medium/0.5 since main 5d4d60c, so gate
+    # tests that must trigger use the medium threshold.
     (root / "app.py").write_text(
         "value = input()\neval(value)\n", encoding="utf-8"
     )

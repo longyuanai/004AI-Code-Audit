@@ -8,7 +8,7 @@ SAMPLES = ROOT / "samples" / "go"
 
 
 def test_go_adapter_extracts_functions(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     adapter = GoLanguageAdapter()
     tree = adapter.parser().parse((SAMPLES / "main.go").read_bytes())
@@ -18,7 +18,7 @@ def test_go_adapter_extracts_functions(
 
 
 def test_go_samples_dispatch_and_find_command_flow(
-    cp314_tree_sitter_binding,
+    tree_sitter_binding,
 ) -> None:
     result = scan_repository(SAMPLES, ["go"])
 
