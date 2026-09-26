@@ -5,11 +5,12 @@
   "spec": {
     "fields": "rule id, then path, then snippet, joined by U+0000 (NUL). File paths cannot contain NUL and rule ids do not use it (custom rule ids are unconstrained strings, so this is a convention there, not a guarantee); with NUL absent from the first two fields the split is unambiguous (see vectors field-shift-a / field-shift-b).",
     "ruleId": "Used verbatim and case-sensitively. TypeScript: Finding.ruleId. Python: metadata.rule_id, else finding.id, else \"unknown\".",
-    "path": "Every U+005C (backslash) is replaced by U+002F (slash); nothing else is changed. TypeScript: Finding.file, which the orchestrator already makes cwd-relative with forward slashes. Python: metadata.relative_path (repository-relative), else finding.host. The two agree when the TypeScript CLI runs from the repository root.",
+    "path": "Relative to the repository root, then every U+005C (backslash) is replaced by U+002F (slash). The repository root is the nearest ancestor of the scan base that contains a .git entry (a directory, or a file as in worktrees and submodules); without one it is the scan base itself. The scan base is the working directory for the TypeScript CLI and repo_path for Python. TypeScript reports this path as Finding.file; Python keeps metadata.relative_path relative to repo_path (the CodeAdapter envelope contract) and prefixes it with repo_path's position inside the repository only when computing the fingerprint.",
     "snippet": "TypeScript: Finding.snippet. Python adapter only: metadata.snippet, else the last evidence entry, else description, else title; after normalisation a leading \"sink line N: \" / \"source line N: \" evidence prefix is removed. Cross-stack vectors below exercise the shared core, not the Python-only source selection.",
     "whitespace": "Each maximal run of the canonicalWhitespace code points becomes one U+0020, then leading and trailing U+0020 are removed. The set is fixed here on purpose: JavaScript \\s and Python \\s differ (JS-only U+FEFF; Python-only U+001C-U+001F and U+0085) and both depend on the engine's Unicode version.",
     "encoding": "UTF-8. An unpaired surrogate is encoded as U+FFFD (Node's behaviour; Python previously raised UnicodeEncodeError).",
-    "digest": "SHA-256, lowercase hex, first 16 characters (64 bits)."
+    "digest": "SHA-256, lowercase hex, first 16 characters (64 bits).",
+    "legacyPath": "Before this rule TypeScript used the path relative to the working directory and Python the path relative to repo_path. When that legacy path differs, baseline matching tries the canonical fingerprint first and the legacy one second, so a baseline written from a subdirectory by an older release keeps absorbing its findings. New baselines are always written canonically. Finding IDs keep their pre-existing derivation."
   },
   "canonicalWhitespace": [
     "U+0009",
@@ -366,5 +367,85 @@
       },
       "impact": "Only snippets containing U+FEFF, U+001C-U+001F or U+0085 change, plus unpaired surrogates, which previously raised UnicodeEncodeError. The Python baseline writer is not on main; a baseline written from such a snippet reports that finding once as new; regenerate it with the baseline writer. Fingerprints already stored in metadata.fingerprint are still honoured verbatim and never recomputed."
     }
-  }
+  },
+  "pathBasisCases": [
+    {
+      "name": "scan-from-repository-root",
+      "layout": [
+        "repo/.git/",
+        "repo/src/app.js"
+      ],
+      "base": "repo",
+      "file": "repo/src/app.js",
+      "expectPath": "src/app.js",
+      "expectLegacyPath": "src/app.js"
+    },
+    {
+      "name": "scan-from-subdirectory",
+      "layout": [
+        "repo/.git/",
+        "repo/src/app.js"
+      ],
+      "base": "repo/src",
+      "file": "repo/src/app.js",
+      "expectPath": "src/app.js",
+      "expectLegacyPath": "app.js"
+    },
+    {
+      "name": "scan-from-nested-subdirectory",
+      "layout": [
+        "repo/.git/",
+        "repo/a/b/c.js"
+      ],
+      "base": "repo/a/b",
+      "file": "repo/a/b/c.js",
+      "expectPath": "a/b/c.js",
+      "expectLegacyPath": "c.js"
+    },
+    {
+      "name": "no-repository-falls-back-to-base",
+      "layout": [
+        "plain/src/app.js"
+      ],
+      "base": "plain/src",
+      "file": "plain/src/app.js",
+      "expectPath": "app.js",
+      "expectLegacyPath": "app.js"
+    },
+    {
+      "name": "git-file-marks-a-worktree-root",
+      "layout": [
+        "wt/.git",
+        "wt/src/x.js"
+      ],
+      "base": "wt/src",
+      "file": "wt/src/x.js",
+      "expectPath": "src/x.js",
+      "expectLegacyPath": "x.js"
+    },
+    {
+      "name": "submodule-file-seen-from-the-outer-repository",
+      "layout": [
+        "outer/.git/",
+        "outer/sub/.git",
+        "outer/sub/lib/y.js"
+      ],
+      "base": "outer",
+      "file": "outer/sub/lib/y.js",
+      "expectPath": "sub/lib/y.js",
+      "expectLegacyPath": "sub/lib/y.js"
+    },
+    {
+      "name": "submodule-scanned-from-inside",
+      "layout": [
+        "outer/.git/",
+        "outer/sub/.git",
+        "outer/sub/lib/y.js"
+      ],
+      "base": "outer/sub/lib",
+      "file": "outer/sub/lib/y.js",
+      "expectPath": "lib/y.js",
+      "expectLegacyPath": "y.js"
+    }
+  ]
 }

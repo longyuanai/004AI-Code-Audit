@@ -17,6 +17,7 @@ from ai_code_audit.fingerprint import (
     CANONICAL_WHITESPACE_CODE_POINTS,
     canonical_fingerprint,
     normalize_snippet,
+    repository_path_prefix,
 )
 from ai_code_audit.postprocess import (
     BASELINE_VERSION,
@@ -163,3 +164,90 @@ def test_python_only_evidence_prefix_is_still_removed() -> None:
     assert fingerprint_finding(finding) == canonical_fingerprint(
         "004-phase2-taint", "app.py", "eval(value)"
     )
+
+
+@pytest.mark.parametrize(
+    "case", CONTRACT["pathBasisCases"], ids=lambda case: case["name"]
+)
+def test_path_basis(case: dict[str, object], tmp_path: Path) -> None:
+    # Entries ending in "/" are directories; a bare ``.git`` is a file, as in
+    # worktrees and submodules.
+    for entry in case["layout"]:  # type: ignore[union-attr]
+        target = tmp_path / entry
+        if entry.endswith("/"):
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("", encoding="utf-8")
+    base = tmp_path / str(case["base"])
+    relative_path = (tmp_path / str(case["file"])).relative_to(base).as_posix()
+
+    # metadata.relative_path stays repo_path-relative (the legacy form); the
+    # fingerprint path is the prefix plus it.
+    assert relative_path == case["expectLegacyPath"]
+    assert repository_path_prefix(base) + relative_path == case["expectPath"]
+
+
+def test_prefixed_fingerprint_and_legacy_baseline_fallback() -> None:
+    finding = _finding("basic")
+    vector = VECTORS["basic"]
+    canonical = canonical_fingerprint(
+        vector["ruleId"], "svc/" + vector["path"], vector["snippet"]
+    )
+    legacy = vector["fingerprint"]
+    assert canonical != legacy
+    assert fingerprint_finding(finding, path_prefix="svc/") == canonical
+    assert build_baseline([finding], path_prefix="svc/")["fingerprints"] == {
+        canonical: 1
+    }
+
+    # A baseline written by an older release from repo_path=svc still matches.
+    kept, baselined = filter_against_baseline(
+        [_finding("basic")], {legacy: 1}, path_prefix="svc/"
+    )
+    assert (kept, baselined) == ([], 1)
+
+    # One canonical and one legacy acknowledgement absorb two copies; a third is new.
+    kept, baselined = filter_against_baseline(
+        [_finding("basic") for _ in range(3)],
+        {canonical: 1, legacy: 1},
+        path_prefix="svc/",
+    )
+    assert (len(kept), baselined) == (1, 2)
+
+    # At the repository root there is no legacy form to fall back to.
+    other = canonical_fingerprint(vector["ruleId"], "elsewhere/x", vector["snippet"])
+    kept, baselined = filter_against_baseline([_finding("basic")], {other: 1})
+    assert baselined == 0
+
+
+def test_opengrep_below_repository_root_keeps_its_finding_id(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    service = (tmp_path / "svc").resolve()
+    service.mkdir()
+    result = {
+        "check_id": "rules.CG-OG-PY-001",
+        "path": "pkg/app.py",
+        "start": {"line": 3, "col": 5},
+        "extra": {"message": "eval of user input", "lines": "eval(user_input)"},
+    }
+
+    finding = _normalize_finding(
+        result,
+        repo_path=service,
+        path_prefix=repository_path_prefix(service),
+        known_rule_ids=frozenset({"CG-OG-PY-001"}),
+    )
+
+    metadata = finding["metadata"]
+    unprefixed = canonical_fingerprint("CG-OG-PY-001", "pkg/app.py", "eval(user_input)")
+    assert metadata["relative_path"] == "pkg/app.py"  # type: ignore[index]
+    assert metadata["fingerprint"] == canonical_fingerprint(  # type: ignore[index]
+        "CG-OG-PY-001", "svc/pkg/app.py", "eval(user_input)"
+    )
+    assert finding["id"] == f"code-og-{unprefixed[:12]}"
+    # The legacy fallback reproduces the fingerprint older releases stored.
+    kept, baselined = filter_against_baseline(
+        [finding], {unprefixed: 1}, path_prefix="svc/"
+    )
+    assert baselined == 1

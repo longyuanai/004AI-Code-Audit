@@ -137,8 +137,16 @@ export interface BaselineFilterResult<T> {
  * Drops entries covered by the baseline, consuming one acknowledged
  * occurrence per match so extra copies beyond the acknowledged count still
  * surface as new.
+ *
+ * `legacyFile` is the path an older release would have fingerprinted (it
+ * used cwd-relative paths, so a baseline written from a subdirectory holds
+ * those). It is tried only after the repository-relative fingerprint, so a
+ * baseline written by this release never matches through it; new baselines
+ * are always written with repository-relative paths.
  */
-export function filterAgainstBaseline<T extends Pick<Finding, 'ruleId' | 'file' | 'snippet'>>(
+export function filterAgainstBaseline<
+  T extends Pick<Finding, 'ruleId' | 'file' | 'snippet'> & { legacyFile?: string },
+>(
   findings: T[],
   baseline: Baseline,
 ): BaselineFilterResult<T> {
@@ -148,8 +156,15 @@ export function filterAgainstBaseline<T extends Pick<Finding, 'ruleId' | 'file' 
 
   for (const finding of findings) {
     const fp = fingerprintFinding(finding);
-    if ((remaining[fp] ?? 0) > 0) {
-      remaining[fp] -= 1;
+    const legacy = finding.legacyFile !== undefined
+      && normalizeFingerprintPath(finding.legacyFile) !== normalizeFingerprintPath(finding.file)
+      ? canonicalFingerprint(finding.ruleId, finding.legacyFile, finding.snippet)
+      : undefined;
+    const match = (remaining[fp] ?? 0) > 0
+      ? fp
+      : legacy !== undefined && (remaining[legacy] ?? 0) > 0 ? legacy : undefined;
+    if (match !== undefined) {
+      remaining[match] -= 1;
       baselined += 1;
     } else {
       kept.push(finding);

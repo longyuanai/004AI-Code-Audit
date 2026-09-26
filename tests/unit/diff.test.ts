@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseUnifiedDiff, loadChangedLines, overlapsChangedLines } from '../../src/scanner/diff.js';
 import { scan } from '../../src/scanner/orchestrator.js';
+import { buildBaseline, canonicalFingerprint } from '../../src/scanner/baseline.js';
+import { findRepositoryRoot } from '../../src/scanner/repository.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import type { ScanOptions } from '../../src/scanner/orchestrator.js';
 
@@ -160,8 +162,9 @@ describe('scan with --diff filtering', () => {
         '',
       ].join('\n'));
 
-      // The diff path must match Finding.file, which is cwd-relative.
-      const relPath = relative(process.cwd(), file).replace(/\\/g, '/');
+      // The diff path must match Finding.file, which is repository-relative;
+      // the file sits outside the repository the tests run in.
+      const relPath = relative(findRepositoryRoot(process.cwd()), file).replace(/\\/g, '/');
       const diffFile = resolve(dir, 'pr.diff');
       await writeFile(diffFile, [
         `--- a/${relPath}`,
@@ -219,6 +222,77 @@ describe('scan with --diff filtering', () => {
       expect(result.findings.length).toBe(1);
     } finally {
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps changed-line findings when the scan runs from a subdirectory', async () => {
+    const repo = await mkdtemp(resolve(tmpdir(), 'cg-diff-repo-'));
+    const originalCwd = process.cwd();
+    try {
+      await mkdir(resolve(repo, '.git'));
+      await mkdir(resolve(repo, 'src'));
+      await writeFile(resolve(repo, 'src', 'app.ts'), 'eval(userInput);\n');
+      // git diff always names files from the repository root.
+      const diffFile = resolve(repo, 'pr.diff');
+      await writeFile(diffFile, [
+        '--- a/src/app.ts',
+        '+++ b/src/app.ts',
+        '@@ -0,0 +1,1 @@',
+        '+eval(userInput);',
+        '',
+      ].join('\n'));
+
+      process.chdir(resolve(repo, 'src'));
+      const report = resolve(repo, 'report.json');
+      const result = await scan(makeOptions(['app.ts'], { diffPath: diffFile, outputFile: report }));
+
+      // Before, Finding.file was "app.ts" and the diff dropped it.
+      expect(result.findings.map(f => f.file)).toEqual(['src/app.ts']);
+      expect(result.diffFiltered).toBe(0);
+    } finally {
+      process.chdir(originalCwd);
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('baselines across working directories', () => {
+  it('matches root and legacy subdirectory baselines, and writes the repository form', async () => {
+    const repo = await mkdtemp(resolve(tmpdir(), 'cg-base-repo-'));
+    const originalCwd = process.cwd();
+    try {
+      await mkdir(resolve(repo, '.git'));
+      await mkdir(resolve(repo, 'src'));
+      await writeFile(resolve(repo, 'src', 'app.ts'), 'eval(userInput);\n');
+      const report = resolve(repo, 'report.json');
+
+      process.chdir(repo);
+      const fromRoot = await scan(makeOptions(['src/app.ts'], { outputFile: report }));
+      expect(fromRoot.findings.map(f => f.file)).toEqual(['src/app.ts']);
+      const rootBaseline = resolve(repo, 'root-baseline.json');
+      await writeFile(rootBaseline, JSON.stringify(buildBaseline(fromRoot.findings)));
+
+      process.chdir(resolve(repo, 'src'));
+      const fromSub = await scan(makeOptions(['app.ts'], { outputFile: report }));
+      // Same path, so the same baseline entry, from either directory.
+      expect(fromSub.findings.map(f => f.file)).toEqual(['src/app.ts']);
+      expect(buildBaseline(fromSub.findings)).toEqual(buildBaseline(fromRoot.findings));
+      const viaRoot = await scan(makeOptions(['app.ts'], { outputFile: report, baselinePath: rootBaseline }));
+      expect(viaRoot.baselined).toBe(1);
+
+      // An older release run from src/ fingerprinted the cwd-relative "app.ts".
+      const [finding] = fromSub.findings;
+      const legacyBaseline = resolve(repo, 'legacy-baseline.json');
+      await writeFile(legacyBaseline, JSON.stringify({
+        version: 1,
+        fingerprints: { [canonicalFingerprint(finding.ruleId, 'app.ts', finding.snippet)]: 1 },
+      }));
+      const viaLegacy = await scan(makeOptions(['app.ts'], { outputFile: report, baselinePath: legacyBaseline }));
+      expect(viaLegacy.baselined).toBe(1);
+      expect(viaLegacy.findings).toHaveLength(0);
+    } finally {
+      process.chdir(originalCwd);
+      await rm(repo, { recursive: true, force: true });
     }
   });
 });

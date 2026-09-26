@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from pathlib import Path
 
 # Spelled out instead of using ``\\s``: Python and JavaScript disagree on six
 # code points (U+001C-U+001F and U+0085 vs U+FEFF), and both follow their
@@ -45,10 +46,41 @@ def canonical_fingerprint(rule_id: str, path: str, snippet: str) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
+def find_repository_root(base: str | Path) -> Path:
+    """The nearest ancestor of ``base`` holding a ``.git`` entry, else ``base``.
+
+    ``.git`` may be a directory or, in worktrees and submodules, a file. Same
+    walk as src/scanner/repository.ts.
+    """
+
+    start = Path(base).expanduser().resolve()
+    for directory in (start, *start.parents):
+        if (directory / ".git").exists():
+            return directory
+    return start
+
+
+def repository_path_prefix(repo_path: str | Path) -> str:
+    """``repo_path``'s position inside its repository: ``""`` or ``"a/b/"``.
+
+    Findings keep ``metadata.relative_path`` relative to ``repo_path`` (the
+    CodeAdapter envelope contract); fingerprints use this prefix plus that
+    path, so they equal the repository-relative paths the TypeScript CLI
+    reports wherever either scan starts from (contracts/fingerprint.json,
+    spec.path).
+    """
+
+    base = Path(repo_path).expanduser().resolve()
+    relative = base.relative_to(find_repository_root(base)).as_posix()
+    return "" if relative == "." else f"{relative}/"
+
+
 __all__ = [
     "CANONICAL_WHITESPACE_CODE_POINTS",
     "WHITESPACE_CHARS",
     "canonical_fingerprint",
+    "find_repository_root",
     "normalize_path",
     "normalize_snippet",
+    "repository_path_prefix",
 ]

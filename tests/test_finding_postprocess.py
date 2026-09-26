@@ -5,11 +5,13 @@ from pathlib import Path
 
 import pytest
 
+from ai_code_audit.fingerprint import canonical_fingerprint
 from ai_code_audit.postprocess import (
     BaselineError,
     deduplicate_findings,
     fingerprint_finding,
     postprocess_envelope,
+    write_baseline,
 )
 
 
@@ -98,6 +100,40 @@ def test_baseline_path_cannot_escape_repository(tmp_path: Path) -> None:
             repo_path=tmp_path,
             baseline_path=outside,
         )
+
+
+def test_repo_path_below_repository_root_fingerprints_repository_paths(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    service = tmp_path / "svc"
+    service.mkdir()
+    canonical = canonical_fingerprint("CG-OG-PY-001", "svc/app.py", "eval(value)")
+    legacy = canonical_fingerprint("CG-OG-PY-001", "app.py", "eval(value)")
+
+    result = postprocess_envelope(_envelope([_finding(line=10)]), repo_path=service)
+    [finding] = result["findings"]
+    # relative_path keeps the envelope contract; only the fingerprint moves.
+    assert finding["metadata"]["relative_path"] == "app.py"
+    assert finding["metadata"]["fingerprint"] == canonical
+
+    written = write_baseline("new.json", [_finding(line=10)], repo_path=service)
+    assert json.loads(written.read_text(encoding="utf-8"))["fingerprints"] == {
+        canonical: 1
+    }
+
+    # A baseline an older release wrote for repo_path=svc still absorbs it.
+    (service / "old.json").write_text(
+        json.dumps({"version": 1, "fingerprints": {legacy: 1}}),
+        encoding="utf-8",
+    )
+    result = postprocess_envelope(
+        _envelope([_finding(line=10), _finding(line=20)]),
+        repo_path=service,
+        baseline_path="old.json",
+    )
+    assert result["summary"]["baselined"] == 1
+    assert len(result["findings"]) == 1
 
 
 def _finding(*, line: int) -> dict[str, object]:

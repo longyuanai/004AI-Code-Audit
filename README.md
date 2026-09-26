@@ -240,7 +240,7 @@ node dist/index.js scan ./src --dry-run --baseline .codeguard-baseline.json
 
 Baseline fingerprints hash the rule + file + normalized snippet — **no line numbers** — so unrelated edits that shift code up or down don't resurrect acknowledged findings, while any genuinely new finding (or an extra copy of an acknowledged one) still surfaces. The scan reports how many findings the baseline absorbed (`scan.baselined` in JSON, a summary line in text). Commit the baseline file and shrink it over time as findings get fixed.
 
-Two rules of thumb: **always run scans from the repository root** (fingerprints embed cwd-relative paths, so a different working directory silently mismatches the whole baseline), and write baselines from *unfiltered* scans (`--write-baseline` rejects `--severity` for this reason; Stage 2 dismissals are included in the snapshot so later runs don't re-pay to re-triage them).
+Fingerprints use repository-relative paths (relative to the nearest ancestor of the working directory that contains `.git`, or the working directory itself outside a repository), so a scan run from a subdirectory matches the same baseline, `--diff` and SARIF locations as one run from the root. Baselines written by earlier releases, which used working-directory-relative paths, still match; `--write-baseline` writes the repository-relative form. Write baselines from *unfiltered* scans (`--write-baseline` rejects `--severity` for this reason; Stage 2 dismissals are included in the snapshot so later runs don't re-pay to re-triage them).
 
 ### Measuring Stage 2 triage accuracy
 

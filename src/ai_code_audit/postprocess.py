@@ -20,6 +20,7 @@ from ai_code_audit.fingerprint import (
     WHITESPACE_CHARS,
     canonical_fingerprint,
     normalize_snippet,
+    repository_path_prefix,
 )
 from ai_code_audit.risk import RiskConfig, assess_risk
 from ai_code_audit.source_lines import read_source_lines
@@ -53,15 +54,36 @@ class BaselineError(ValueError):
     """Raised when a baseline path or document is invalid."""
 
 
-def fingerprint_finding(finding: Mapping[str, Any]) -> str:
-    metadata = _metadata(finding)
-    existing = metadata.get("fingerprint")
+def fingerprint_finding(
+    finding: Mapping[str, Any],
+    *,
+    path_prefix: str = "",
+) -> str:
+    """The Finding's fingerprint: ``metadata.fingerprint`` if set, else computed.
+
+    ``path_prefix`` is ``repository_path_prefix(repo_path)``; it turns the
+    repo_path-relative ``metadata.relative_path`` into the repository-relative
+    path the fingerprint contract specifies.
+    """
+
+    existing = _metadata(finding).get("fingerprint")
     if isinstance(existing, str) and existing:
         return existing
+    return _computed_fingerprint(finding, path_prefix=path_prefix)
+
+
+def _computed_fingerprint(
+    finding: Mapping[str, Any],
+    *,
+    path_prefix: str,
+) -> str:
+    metadata = _metadata(finding)
     rule_id = str(metadata.get("rule_id") or finding.get("id") or "unknown")
-    relative_path = str(
-        metadata.get("relative_path") or finding.get("host") or "unknown"
-    )
+    relative_path = metadata.get("relative_path")
+    if relative_path:
+        relative_path = path_prefix + str(relative_path)
+    else:
+        relative_path = str(finding.get("host") or "unknown")
     snippet = metadata.get("snippet")
     if not isinstance(snippet, str) or not snippet.strip():
         evidence = finding.get("evidence")
@@ -91,7 +113,10 @@ def postprocess_envelope(
     findings = [
         finding for finding in raw_findings if isinstance(finding, dict)
     ]
-    findings, duplicates = deduplicate_findings(findings)
+    path_prefix = repository_path_prefix(repo_path)
+    findings, duplicates = deduplicate_findings(
+        findings, path_prefix=path_prefix
+    )
     diagnostics: list[str] = []
     findings, suppressed = filter_suppressed(
         findings,
@@ -108,7 +133,9 @@ def postprocess_envelope(
     baselined = 0
     if baseline_path is not None:
         baseline = load_baseline(baseline_path, repo_path=repo_path)
-        findings, baselined = filter_against_baseline(findings, baseline)
+        findings, baselined = filter_against_baseline(
+            findings, baseline, path_prefix=path_prefix
+        )
     findings = enrich_findings(
         findings,
         repo_path=repo_path,
@@ -171,13 +198,15 @@ def enrich_findings(
 
 def deduplicate_findings(
     findings: Iterable[dict[str, Any]],
+    *,
+    path_prefix: str = "",
 ) -> tuple[list[dict[str, Any]], int]:
     kept: list[dict[str, Any]] = []
     seen: set[tuple[str, str, int, int]] = set()
     duplicates = 0
     for finding in findings:
         metadata = _metadata(finding)
-        fingerprint = fingerprint_finding(finding)
+        fingerprint = fingerprint_finding(finding, path_prefix=path_prefix)
         metadata["fingerprint"] = fingerprint
         key = (
             str(metadata.get("rule_id", "")),
@@ -349,12 +378,14 @@ def load_baseline(
 
 def build_baseline(
     findings: Iterable[Mapping[str, Any]],
+    *,
+    path_prefix: str = "",
 ) -> dict[str, object]:
     """Create a secret-free, count-aware baseline document."""
 
     fingerprints: dict[str, int] = {}
     for finding in findings:
-        fingerprint = fingerprint_finding(finding)
+        fingerprint = fingerprint_finding(finding, path_prefix=path_prefix)
         fingerprints[fingerprint] = fingerprints.get(fingerprint, 0) + 1
     return {
         "version": BASELINE_VERSION,
@@ -382,7 +413,9 @@ def write_baseline(
     except ValueError as error:
         raise BaselineError("baseline_path must stay inside repo_path") from error
     path.parent.mkdir(parents=True, exist_ok=True)
-    document = build_baseline(findings)
+    document = build_baseline(
+        findings, path_prefix=repository_path_prefix(root)
+    )
     temporary_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -410,14 +443,31 @@ def write_baseline(
 def filter_against_baseline(
     findings: Iterable[dict[str, Any]],
     baseline: Mapping[str, int],
+    *,
+    path_prefix: str = "",
 ) -> tuple[list[dict[str, Any]], int]:
+    """Drop Findings the baseline covers, one acknowledged occurrence each.
+
+    With a non-empty ``path_prefix`` (repo_path below the repository root),
+    a baseline written by an older release holds fingerprints of the bare
+    repo_path-relative path; those are tried only after the canonical one.
+    """
+
     remaining = dict(baseline)
     kept: list[dict[str, Any]] = []
     baselined = 0
     for finding in findings:
-        fingerprint = fingerprint_finding(finding)
+        fingerprint = fingerprint_finding(finding, path_prefix=path_prefix)
+        legacy = (
+            _computed_fingerprint(finding, path_prefix="")
+            if path_prefix
+            else None
+        )
         if remaining.get(fingerprint, 0) > 0:
             remaining[fingerprint] -= 1
+            baselined += 1
+        elif legacy is not None and remaining.get(legacy, 0) > 0:
+            remaining[legacy] -= 1
             baselined += 1
         else:
             kept.append(finding)

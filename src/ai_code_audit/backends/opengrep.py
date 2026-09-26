@@ -15,7 +15,10 @@ from ai_code_audit.backends.base import (
     BackendUnavailableError,
     ScanRequest,
 )
-from ai_code_audit.fingerprint import canonical_fingerprint
+from ai_code_audit.fingerprint import (
+    canonical_fingerprint,
+    repository_path_prefix,
+)
 from ai_code_audit.scanner import discover_files
 
 SEVERITY_MAP = {
@@ -135,6 +138,7 @@ def _normalize_findings(
     raw_results = document.get("results", [])
     if not isinstance(raw_results, list):
         raise BackendOutputError("Opengrep results must be a list")
+    path_prefix = repository_path_prefix(repo_path)
     findings: list[dict[str, object]] = []
     for result in raw_results:
         if not isinstance(result, dict):
@@ -143,6 +147,7 @@ def _normalize_findings(
             _normalize_finding(
                 result,
                 repo_path=repo_path,
+                path_prefix=path_prefix,
                 known_rule_ids=known_rule_ids,
             )
         )
@@ -166,6 +171,7 @@ def _normalize_finding(
     result: Mapping[str, Any],
     *,
     repo_path: Path,
+    path_prefix: str = "",
     known_rule_ids: frozenset[str],
 ) -> dict[str, object]:
     try:
@@ -197,7 +203,12 @@ def _normalize_finding(
         if isinstance(matched_lines, str) and matched_lines.strip()
         else message
     )
-    fingerprint = canonical_fingerprint(rule_id, relative_path, snippet)
+    fingerprint = canonical_fingerprint(
+        rule_id, path_prefix + relative_path, snippet
+    )
+    # The id predates the repository-relative fingerprint path; it keeps its
+    # repo_path-relative derivation so Finding IDs do not change.
+    finding_id = canonical_fingerprint(rule_id, relative_path, snippet)[:12]
     code_flows = _dataflow_steps(
         extra.get("dataflow_trace"),
         repo_path=repo_path,
@@ -213,7 +224,7 @@ def _normalize_finding(
     rule_metadata = extra.get("metadata")
     rule_metadata = rule_metadata if isinstance(rule_metadata, dict) else {}
     return {
-        "id": f"code-og-{fingerprint[:12]}",
+        "id": f"code-og-{finding_id}",
         "source": "004",
         "severity": severity,
         "confidence": confidence,

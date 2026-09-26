@@ -32,9 +32,14 @@ def collect_diff(
     _validate_ref(base_ref)
     _validate_ref(head_ref)
     revision_range = f"{base_ref}..{head_ref}"
+    # --relative: name files relative to repo_path, like the scanner's
+    # metadata.relative_path, and leave out changes outside it. Without it a
+    # repo_path below the repository root matched no file and a diff scan
+    # returned nothing. At the repository root it changes nothing.
     names = _run_git(
         root,
         "diff",
+        "--relative",
         "--name-only",
         "--diff-filter=ACMR",
         revision_range,
@@ -52,6 +57,7 @@ def collect_diff(
         "-c",
         "core.quotepath=false",
         "diff",
+        "--relative",
         "--diff-filter=ACMR",
         "-U0",
         revision_range,

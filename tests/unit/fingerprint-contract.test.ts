@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import {
   buildBaseline,
   canonicalFingerprint,
@@ -8,6 +9,7 @@ import {
   fingerprintFinding,
   normalizeFingerprintSnippet,
 } from '../../src/scanner/baseline.js';
+import { createPathResolver } from '../../src/scanner/repository.js';
 import { CANONICAL_WHITESPACE_CODE_POINTS } from '../../src/scanner/whitespace.js';
 import type { Finding } from '../../src/types/index.js';
 
@@ -27,6 +29,14 @@ interface Contract {
     baseline: Record<string, number>;
     findings: string[];
     expect: { kept: number; baselined: number };
+  }>;
+  pathBasisCases: Array<{
+    name: string;
+    layout: string[];
+    base: string;
+    file: string;
+    expectPath: string;
+    expectLegacyPath: string;
   }>;
 }
 
@@ -116,6 +126,54 @@ describe('fingerprint contract', () => {
       expect(result.baselined).toBe(c.expect.baselined);
     });
   }
+
+  for (const c of contract.pathBasisCases) {
+    it(`path basis ${c.name}`, () => {
+      const root = mkdtempSync(join(tmpdir(), 'cg-pathbasis-'));
+      try {
+        // Entries ending in "/" are directories; a bare `.git` is a file, as
+        // in worktrees and submodules.
+        for (const entry of c.layout) {
+          const target = join(root, entry);
+          if (entry.endsWith('/')) {
+            mkdirSync(target, { recursive: true });
+          } else {
+            mkdirSync(dirname(target), { recursive: true });
+            writeFileSync(target, '');
+          }
+        }
+        const reported = createPathResolver(join(root, c.base))(join(root, c.file));
+        expect(reported).toEqual({ path: c.expectPath, legacyPath: c.expectLegacyPath });
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+
+  it('matches a baseline written with the legacy path, canonical first', () => {
+    const finding = { ...findingFor('basic'), file: 'src/app.js', legacyFile: 'app.js' };
+    const canonical = canonicalFingerprint(finding.ruleId, 'src/app.js', finding.snippet);
+    const legacy = canonicalFingerprint(finding.ruleId, 'app.js', finding.snippet);
+    expect(canonical).not.toBe(legacy);
+
+    const fromLegacy = filterAgainstBaseline([finding], { version: 1, fingerprints: { [legacy]: 1 } });
+    expect(fromLegacy).toEqual({ kept: [], baselined: 1 });
+
+    // One canonical and one legacy acknowledgement absorb two copies; a third is new.
+    const both = filterAgainstBaseline([finding, finding, finding], {
+      version: 1,
+      fingerprints: { [canonical]: 1, [legacy]: 1 },
+    });
+    expect(both.baselined).toBe(2);
+    expect(both.kept).toHaveLength(1);
+
+    // Without a differing legacy path nothing but the canonical form matches.
+    const plain = filterAgainstBaseline([{ ...finding, legacyFile: 'src/app.js' }], {
+      version: 1,
+      fingerprints: { [legacy]: 1 },
+    });
+    expect(plain.baselined).toBe(0);
+  });
 
   it('keeps the NUL separator visible in the source', () => {
     // A raw NUL made grep and diff treat baseline.ts as binary.

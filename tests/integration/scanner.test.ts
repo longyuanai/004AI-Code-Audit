@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { scan } from '../../src/scanner/orchestrator.js';
+import { findRepositoryRoot } from '../../src/scanner/repository.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { VERSION } from '../../src/version.js';
 import type { AnalyzeFindingsDependencies } from '../../src/analyzer/index.js';
@@ -120,7 +121,7 @@ describe('Scanner orchestrator', () => {
       // namespace's rule: before, both fell back to "suppress everything".
       expect(result.findings.filter(f => f.ruleId === 'CG-001').map(f => f.location.start.line)).toEqual([1, 2]);
       expect(result.suppressed).toBe(1);
-      const displayPath = relative(process.cwd(), file).replace(/\\/g, '/');
+      const displayPath = relative(findRepositoryRoot(process.cwd()), file).replace(/\\/g, '/');
       expect(result.warnings).toEqual([
         `${displayPath}:1: invalid codeguard-ignore directive: unexpected token "reviewed"; it suppresses nothing (put "--" before a free-text reason)`,
       ]);

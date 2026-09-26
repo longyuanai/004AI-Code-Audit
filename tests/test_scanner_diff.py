@@ -53,6 +53,30 @@ def test_scan_diff_ignores_sink_outside_changed_lines(
     assert envelope["findings"] == []
 
 
+def test_scan_diff_below_the_repository_root(
+    tree_sitter_binding,
+    tmp_path: Path,
+) -> None:
+    repository = _repository(tmp_path)
+    service = repository / "svc"
+    service.mkdir()
+    (service / "app.py").write_text("value = 1\n", encoding="utf-8")
+    (repository / "other.py").write_text("value = 1\n", encoding="utf-8")
+    _commit(repository, "base")
+    for path in (service / "app.py", repository / "other.py"):
+        path.write_text("value = input('x')\neval(value)\n", encoding="utf-8")
+    _commit(repository, "head")
+
+    envelope = scan_diff(service, "HEAD~1", "HEAD", ["python"])
+
+    # Before, the diff named "svc/app.py", nothing under repo_path matched it,
+    # and the scan returned no findings. Changes outside repo_path stay out.
+    assert envelope["summary"]["diff"]["files"] == ["app.py"]
+    assert envelope["summary"]["files_scanned"] == 1
+    assert len(envelope["findings"]) == 1
+    assert envelope["findings"][0]["metadata"]["relative_path"] == "app.py"
+
+
 def _repository(path: Path) -> Path:
     _git(path, "init")
     _git(path, "config", "user.email", "phase2@example.invalid")
