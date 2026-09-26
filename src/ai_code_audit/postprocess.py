@@ -22,6 +22,7 @@ from ai_code_audit.fingerprint import (
     normalize_snippet,
 )
 from ai_code_audit.risk import RiskConfig, assess_risk
+from ai_code_audit.source_lines import read_source_lines
 
 BASELINE_VERSION = 1
 CONTEXT_RADIUS = 3
@@ -267,10 +268,9 @@ def filter_suppressed(
     root = repo_path.resolve()
 
     def directives_at(path: Path, line_number: int) -> ParsedDirectives:
-        lines = cache.setdefault(
-            path,
-            path.read_text(encoding="utf-8", errors="replace").splitlines(),
-        )
+        if path not in cache:
+            cache[path] = read_source_lines(path)
+        lines = cache[path]
         if line_number < 1 or line_number > len(lines):
             return _NO_DIRECTIVES
         key = (path, line_number)
@@ -465,9 +465,7 @@ def _classification_context(
     try:
         if path.stat().st_size > MAX_CONTEXT_FILE_BYTES:
             return None
-        lines = path.read_text(
-            encoding="utf-8", errors="replace"
-        ).splitlines()
+        lines = read_source_lines(path)
     except OSError:
         return None
     selected_lines = _context_lines(lines, metadata)

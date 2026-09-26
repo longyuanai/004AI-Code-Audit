@@ -35,7 +35,8 @@
       "unrecognized": "codeguard-ignore names unrecognized rule id {id}; it matches no rule",
       "quoting": "{token} and {id} are rendered in double quotes; backslash and double quote are backslash-escaped, and U+0000-U+001F, U+007F-U+009F and unpaired surrogates are written as \\uXXXX (lowercase hex), so a crafted comment cannot inject terminal control sequences into CI logs.",
       "location": "Diagnostics point at the directive's own line (for next-line directives, the line above the finding). The Python envelope and the TypeScript CLI render them as \"{path}:{line}: {message}\". One diagnostic per directive line and message, however many findings it affects, sorted by line then message. Diagnostics are reported only for directives that target a line with a finding."
-    }
+    },
+    "lineNumbering": "Lines are separated by U+000A only. CRLF therefore counts once, and a trailing U+000D belongs to the line. CR alone, VT, FF, FS/GS/RS, NEL, LS and PS do not start a new line. This is the rule tree-sitter applies on both stacks (and so the rule behind every finding's line number) and the one GitHub uses for SARIF regions; Python's str.splitlines() and universal-newline reading do not follow it."
   },
   "directiveCases": [
     {
@@ -908,6 +909,208 @@
           {
             "line": 1,
             "message": "invalid codeguard-ignore directive: unexpected token \"CG-001\\u001b[31m\\\\\\\"x\"; it suppresses nothing (put \"--\" before a free-text reason)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "form-feed-does-not-shift-line-numbers",
+      "source": [
+        "x = 1\fy = 2",
+        "eval(a)  # codeguard-ignore CG-001",
+        "eval(b)"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "vertical-tab-does-not-shift-line-numbers",
+      "source": [
+        "x = 1\u000by = 2",
+        "eval(a)  # codeguard-ignore CG-001",
+        "eval(b)"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "next-line-char-does-not-shift-line-numbers",
+      "source": [
+        "x = 1y = 2",
+        "eval(a)  # codeguard-ignore CG-001",
+        "eval(b)"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "line-separator-does-not-shift-line-numbers",
+      "source": [
+        "x = 1 y = 2",
+        "eval(a)  # codeguard-ignore CG-001",
+        "eval(b)"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "paragraph-separator-does-not-shift-line-numbers",
+      "source": [
+        "x = 1 y = 2",
+        "eval(a)  # codeguard-ignore CG-001",
+        "eval(b)"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "lone-carriage-return-does-not-shift-line-numbers",
+      "source": [
+        "x = 1\ry = 2",
+        "eval(a)  # codeguard-ignore CG-001",
+        "eval(b)"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "form-feed-before-next-line-directive",
+      "source": [
+        "\f",
+        "# codeguard-ignore-next-line CG-001",
+        "eval(a)",
+        "eval(b)  # codeguard-ignore CG-"
+      ],
+      "findings": [
+        [
+          3,
+          "CG-001"
+        ],
+        [
+          4,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            4,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": [
+          {
+            "line": 4,
+            "message": "invalid codeguard-ignore directive: unexpected token \"CG-\"; it suppresses nothing (put \"--\" before a free-text reason)"
           }
         ]
       }

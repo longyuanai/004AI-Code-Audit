@@ -16,6 +16,7 @@ from ai_code_audit.languages import (
 )
 from ai_code_audit.languages.base import walk_nodes
 from ai_code_audit.languages.typescript_lang import TypeScriptLanguageAdapter
+from ai_code_audit.source_lines import split_source_lines
 
 EXCLUDED_PARTS = frozenset(
     {
@@ -211,10 +212,10 @@ def _security_findings(
     language: str,
     changed_ranges: Sequence[tuple[int, int]] | None,
 ) -> list[dict[str, object]]:
-    raw_lines = source.decode("utf-8", errors="replace").splitlines()
-    code_lines = _mask_literals(tree, source).decode(
-        "utf-8", errors="replace"
-    ).splitlines()
+    raw_lines = split_source_lines(source.decode("utf-8", errors="replace"))
+    code_lines = split_source_lines(
+        _mask_literals(tree, source).decode("utf-8", errors="replace")
+    )
 
     source_lines = [
         number

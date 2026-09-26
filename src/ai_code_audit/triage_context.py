@@ -11,6 +11,8 @@ from typing import Any
 
 from shared_llm_core.untrusted import wrap_untrusted
 
+from ai_code_audit.source_lines import read_source_lines
+
 CONTEXT_RADIUS = 4
 MAX_CONTEXT_CHARS = 6_000
 MAX_CONTEXT_FILE_BYTES = 2 * 1024 * 1024
@@ -182,7 +184,7 @@ def _read_excerpt(
         path.relative_to(root)
         if not path.is_file() or path.stat().st_size > MAX_CONTEXT_FILE_BYTES:
             return ""
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        lines = read_source_lines(path)
     except (OSError, ValueError):
         return ""
     line_numbers = {line, *_flow_lines(metadata, relative_path=str(raw_path))}
