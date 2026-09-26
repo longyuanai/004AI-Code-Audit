@@ -4,7 +4,7 @@ import { relative, resolve } from 'node:path';
 import type { CodeGuardConfig, ScanResult, Finding, SuspiciousNode, SkippedFile, OutputFormat, Severity } from '../types/index.js';
 import { SEVERITY_RANK } from '../types/index.js';
 import { parse, detectLanguage, getSupportedExtensions } from '../parser/index.js';
-import { loadRules, runRules } from '../rules/index.js';
+import { getAllRuleIds, loadRules, runRules } from '../rules/index.js';
 import { generateReport } from '../reporter/index.js';
 import { analyzeFindings, type AnalyzeFindingsDependencies } from '../analyzer/index.js';
 import { FileCacheStore } from '../cache/index.js';
@@ -52,6 +52,10 @@ export async function scan(
   const allSuspicious: SuspiciousNode[] = [];
   const skipped: SkippedFile[] = [];
   const suppressionEnabled = options.inlineSuppression !== false;
+  // Built-ins are listed even when disabled, so naming a disabled rule in a
+  // directive is not reported as an unknown id.
+  const knownRuleIds = [...getAllRuleIds(), ...rules.map(rule => rule.id)];
+  const warnings: string[] = [];
   let suppressed = 0;
 
   for (const file of files) {
@@ -65,13 +69,11 @@ export async function scan(
       const source = await readFile(file, 'utf-8');
       const tree = await parse(source, language);
       const found = runRules(tree, rules, file);
-      if (suppressionEnabled) {
-        const result = filterSuppressed(found, source);
-        suppressed += result.suppressed;
-        allSuspicious.push(...result.kept);
-      } else {
-        allSuspicious.push(...found);
-      }
+      const result = filterSuppressed(found, source, { enabled: suppressionEnabled, knownRuleIds });
+      suppressed += result.suppressed;
+      allSuspicious.push(...result.kept);
+      const displayPath = relative(process.cwd(), file).replace(/\\/g, '/');
+      warnings.push(...result.diagnostics.map(d => `${displayPath}:${d.line}: ${d.message}`));
     } catch (error) {
       skipped.push({
         file,
@@ -168,6 +170,7 @@ export async function scan(
     findings,
     dismissedFindings,
     skipped,
+    warnings,
     duration: Date.now() - startTime,
     llmCalls,
     estimatedCost,

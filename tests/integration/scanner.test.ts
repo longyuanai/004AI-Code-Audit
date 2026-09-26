@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { relative, resolve } from 'node:path';
 import { scan } from '../../src/scanner/orchestrator.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { VERSION } from '../../src/version.js';
@@ -101,6 +101,50 @@ describe('Scanner orchestrator', () => {
       // Only the first (unsuppressed) query survives; two were silenced.
       expect(result.findings.filter(f => f.ruleId === 'CG-001')).toHaveLength(1);
       expect(result.suppressed).toBe(2);
+    });
+  });
+
+  it('keeps findings behind invalid or foreign-namespace directives and reports why', async () => {
+    await withTempDir(async tempDir => {
+      const file = resolve(tempDir, 'sample.js');
+      const reportFile = resolve(tempDir, 'report.json');
+      await writeFile(file, [
+        'pool.query(`SELECT * FROM users WHERE id = ${a}`); // codeguard-ignore CG-001, reviewed',
+        'pool.query(`SELECT * FROM users WHERE id = ${b}`); // codeguard-ignore 004-taint-source-to-sink',
+        'pool.query(`SELECT * FROM users WHERE id = ${c}`); // codeguard-ignore CG-001 -- constant id',
+      ].join('\n'));
+
+      const result = await runMuted(() => scan(makeOptions([file], { outputFile: reportFile })));
+
+      // Line 1 is invalid (prose after a comma) and line 2 names another
+      // namespace's rule: before, both fell back to "suppress everything".
+      expect(result.findings.filter(f => f.ruleId === 'CG-001').map(f => f.location.start.line)).toEqual([1, 2]);
+      expect(result.suppressed).toBe(1);
+      const displayPath = relative(process.cwd(), file).replace(/\\/g, '/');
+      expect(result.warnings).toEqual([
+        `${displayPath}:1: invalid codeguard-ignore directive: unexpected token "reviewed"; it suppresses nothing (put "--" before a free-text reason)`,
+      ]);
+
+      // Diagnostics go to stderr via the CLI; the JSON report shape is unchanged.
+      const report = JSON.parse(await readFile(reportFile, 'utf8')) as Record<string, unknown>;
+      expect(Object.keys(report).sort()).toEqual(['dismissedFindings', 'findings', 'scan', 'skipped', 'version']);
+      expect(JSON.stringify(report)).not.toContain('invalid codeguard-ignore directive');
+    });
+  });
+
+  it('keeps every finding and reports nothing with inline suppression disabled', async () => {
+    await withTempDir(async tempDir => {
+      const file = resolve(tempDir, 'sample.js');
+      await writeFile(file, [
+        'pool.query(`SELECT * FROM users WHERE id = ${a}`); // codeguard-ignore',
+        'pool.query(`SELECT * FROM users WHERE id = ${b}`); // codeguard-ignore CG-001, reviewed',
+      ].join('\n'));
+
+      const result = await runMuted(() => scan(makeOptions([file], { inlineSuppression: false })));
+
+      expect(result.findings.filter(f => f.ruleId === 'CG-001')).toHaveLength(2);
+      expect(result.suppressed).toBe(0);
+      expect(result.warnings).toEqual([]);
     });
   });
 

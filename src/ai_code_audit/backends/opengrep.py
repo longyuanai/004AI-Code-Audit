@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -16,6 +15,7 @@ from ai_code_audit.backends.base import (
     BackendUnavailableError,
     ScanRequest,
 )
+from ai_code_audit.fingerprint import canonical_fingerprint
 from ai_code_audit.scanner import discover_files
 
 SEVERITY_MAP = {
@@ -197,7 +197,7 @@ def _normalize_finding(
         if isinstance(matched_lines, str) and matched_lines.strip()
         else message
     )
-    fingerprint = _finding_fingerprint(rule_id, relative_path, snippet)
+    fingerprint = canonical_fingerprint(rule_id, relative_path, snippet)
     code_flows = _dataflow_steps(
         extra.get("dataflow_trace"),
         repo_path=repo_path,
@@ -341,17 +341,6 @@ def _stable_rule_id(
         or raw_rule_id.endswith(f".{rule_id}")
     ]
     return max(matches, key=len) if matches else raw_rule_id
-
-
-def _finding_fingerprint(
-    rule_id: str,
-    relative_path: str,
-    snippet: str,
-) -> str:
-    normalized = re.sub(r"\s+", " ", snippet).strip()
-    return hashlib.sha256(
-        f"{rule_id}\0{relative_path}\0{normalized}".encode()
-    ).hexdigest()[:16]
 
 
 def _dataflow_steps(

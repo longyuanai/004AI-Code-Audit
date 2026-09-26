@@ -51,6 +51,12 @@ export interface ScanResult {
   /** Stage 1 findings dismissed by Stage 2 LLM analysis — kept so suppressions stay auditable */
   dismissedFindings?: Finding[];
   skipped: SkippedFile[];
+  /**
+   * Scan diagnostics as `path:line: message`, e.g. an invalid `codeguard-ignore`
+   * directive that was not applied. The CLI prints them to stderr; they are not
+   * part of the JSON or SARIF report.
+   */
+  warnings?: string[];
   duration: number;
   llmCalls: number;
   estimatedCost: number;

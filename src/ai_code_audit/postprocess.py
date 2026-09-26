@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -16,15 +16,36 @@ from ai_code_audit.classification import (
     DataClassifier,
     DefaultDataClassifier,
 )
+from ai_code_audit.fingerprint import (
+    WHITESPACE_CHARS,
+    canonical_fingerprint,
+    normalize_snippet,
+)
 from ai_code_audit.risk import RiskConfig, assess_risk
 
 BASELINE_VERSION = 1
 CONTEXT_RADIUS = 3
 MAX_CONTEXT_FILE_BYTES = 2 * 1024 * 1024
-RULE_TOKEN = r"(?:CG-[A-Za-z0-9-]+|004-[A-Za-z0-9-]+)"
-RULE_LIST = rf"(?:\s+({RULE_TOKEN}(?:[\s,]+{RULE_TOKEN})*))?"
-SAME_LINE = re.compile(rf"codeguard-ignore(?!-next-line){RULE_LIST}")
-NEXT_LINE = re.compile(rf"codeguard-ignore-next-line{RULE_LIST}")
+
+# Inline suppression grammar, shared with src/scanner/suppression.ts and
+# pinned by contracts/suppression.json. Anything that cannot be parsed
+# unambiguously makes a directive invalid: it then suppresses nothing and is
+# reported, instead of degrading to "suppress everything".
+_SAME_LINE_KEYWORD = re.compile(
+    r"(?<![A-Za-z0-9_-])codeguard-ignore(?![A-Za-z0-9_-])"
+)
+_NEXT_LINE_KEYWORD = re.compile(
+    r"(?<![A-Za-z0-9_-])codeguard-ignore-next-line(?![A-Za-z0-9_-])"
+)
+_RULE_ID = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+", re.ASCII)
+# Starts like a rule id but is not one (``CG-002.``, ``CG-``): a typo, not prose.
+_RULE_ID_LOOKALIKE = re.compile(r"[A-Za-z0-9]+-", re.ASCII)
+_RECOGNIZED_NAMESPACE = re.compile(r"(?:CG|004)-")
+_REASON_DELIMITER = re.compile("(?:--|—)")
+_LEADING_WHITESPACE = re.compile(f"[{WHITESPACE_CHARS}]+")
+_LEADING_SEPARATORS = re.compile(f"[{WHITESPACE_CHARS},]*")
+_TOKEN = re.compile(f"[^{WHITESPACE_CHARS},]*")
+_EVIDENCE_PREFIX = re.compile(r"^(?:sink|source) line \d+:\s*")
 
 
 class BaselineError(ValueError):
@@ -39,7 +60,7 @@ def fingerprint_finding(finding: Mapping[str, Any]) -> str:
     rule_id = str(metadata.get("rule_id") or finding.get("id") or "unknown")
     relative_path = str(
         metadata.get("relative_path") or finding.get("host") or "unknown"
-    ).replace("\\", "/")
+    )
     snippet = metadata.get("snippet")
     if not isinstance(snippet, str) or not snippet.strip():
         evidence = finding.get("evidence")
@@ -48,11 +69,10 @@ def fingerprint_finding(finding: Mapping[str, Any]) -> str:
             if isinstance(evidence, list) and evidence
             else str(finding.get("description") or finding.get("title") or "")
         )
-    normalized = re.sub(r"\s+", " ", snippet).strip()
-    normalized = re.sub(r"^(?:sink|source) line \d+:\s*", "", normalized)
-    return hashlib.sha256(
-        f"{rule_id}\0{relative_path}\0{normalized}".encode()
-    ).hexdigest()[:16]
+    # Python-only snippet selection: evidence entries carry a line-number
+    # prefix that would otherwise make the fingerprint move with the code.
+    normalized = _EVIDENCE_PREFIX.sub("", normalize_snippet(snippet))
+    return canonical_fingerprint(rule_id, relative_path, normalized)
 
 
 def postprocess_envelope(
@@ -62,6 +82,7 @@ def postprocess_envelope(
     baseline_path: str | Path | None = None,
     classifier: DataClassifier | None = None,
     risk_config: RiskConfig | None = None,
+    inline_suppression: bool = True,
 ) -> dict[str, object]:
     raw_findings = envelope.get("findings", [])
     if not isinstance(raw_findings, list):
@@ -70,7 +91,19 @@ def postprocess_envelope(
         finding for finding in raw_findings if isinstance(finding, dict)
     ]
     findings, duplicates = deduplicate_findings(findings)
-    findings, suppressed = filter_suppressed(findings, repo_path=repo_path)
+    diagnostics: list[str] = []
+    findings, suppressed = filter_suppressed(
+        findings,
+        repo_path=repo_path,
+        inline_suppression=inline_suppression,
+        warnings=diagnostics,
+    )
+    if diagnostics:
+        existing = envelope.get("warnings")
+        if isinstance(existing, list):
+            existing.extend(diagnostics)
+        else:
+            envelope["warnings"] = diagnostics
     baselined = 0
     if baseline_path is not None:
         baseline = load_baseline(baseline_path, repo_path=repo_path)
@@ -159,15 +192,96 @@ def deduplicate_findings(
     return kept, duplicates
 
 
+@dataclass(frozen=True)
+class Directive:
+    """One parsed ``codeguard-ignore`` directive.
+
+    ``kind`` is ``"all"`` (bare), ``"scoped"`` (``ids``) or ``"invalid"``
+    (``token`` is the first thing that could not be parsed).
+    """
+
+    kind: str
+    ids: tuple[str, ...] = ()
+    unrecognized: tuple[str, ...] = ()
+    token: str | None = None
+
+
+@dataclass(frozen=True)
+class ParsedDirectives:
+    same_line: Directive | None
+    next_line: Directive | None
+
+
+def parse_directives(
+    line: str,
+    known_rule_ids: Iterable[str] | None = None,
+) -> ParsedDirectives:
+    known = _known_set(known_rule_ids)
+    return ParsedDirectives(
+        same_line=_parse_keyword(line, _SAME_LINE_KEYWORD, known),
+        next_line=_parse_keyword(line, _NEXT_LINE_KEYWORD, known),
+    )
+
+
+def quote_token(token: str) -> str:
+    """Render source text for a diagnostic without passing control characters
+    through, so a crafted comment cannot inject terminal sequences into CI logs."""
+
+    out = ['"']
+    for character in token:
+        code = ord(character)
+        if character == "\\":
+            out.append("\\\\")
+        elif character == '"':
+            out.append('\\"')
+        elif code <= 0x1F or 0x7F <= code <= 0x9F or 0xD800 <= code <= 0xDFFF:
+            out.append(f"\\u{code:04x}")
+        else:
+            out.append(character)
+    out.append('"')
+    return "".join(out)
+
+
 def filter_suppressed(
     findings: Iterable[dict[str, Any]],
     *,
     repo_path: Path,
+    inline_suppression: bool = True,
+    known_rule_ids: Iterable[str] | None = None,
+    warnings: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
+    """Drop findings covered by an inline directive.
+
+    Invalid or unrecognized directives that target a finding's line are
+    appended to ``warnings`` as ``path:line: message``.
+    """
+
+    if not inline_suppression:
+        return list(findings), 0
+    known = _known_set(known_rule_ids)
     cache: dict[Path, list[str]] = {}
+    parsed: dict[tuple[Path, int], ParsedDirectives] = {}
+    reported: set[tuple[str, int, str]] = set()
     kept: list[dict[str, Any]] = []
     suppressed = 0
     root = repo_path.resolve()
+
+    def directives_at(path: Path, line_number: int) -> ParsedDirectives:
+        lines = cache.setdefault(
+            path,
+            path.read_text(encoding="utf-8", errors="replace").splitlines(),
+        )
+        if line_number < 1 or line_number > len(lines):
+            return _NO_DIRECTIVES
+        key = (path, line_number)
+        if key not in parsed:
+            text = lines[line_number - 1]
+            parsed[key] = ParsedDirectives(
+                same_line=_parse_keyword(text, _SAME_LINE_KEYWORD, known),
+                next_line=_parse_keyword(text, _NEXT_LINE_KEYWORD, known),
+            )
+        return parsed[key]
+
     for finding in findings:
         metadata = _metadata(finding)
         path = _finding_path(finding, metadata, root)
@@ -176,18 +290,25 @@ def filter_suppressed(
         if path is None:
             kept.append(finding)
             continue
-        lines = cache.setdefault(
-            path,
-            path.read_text(encoding="utf-8", errors="replace").splitlines(),
-        )
-        same = _suppression(lines, line_number, SAME_LINE)
-        previous = _suppression(lines, line_number - 1, NEXT_LINE)
-        if _matches_suppression(same, rule_id) or _matches_suppression(
-            previous, rule_id
+        same = directives_at(path, line_number).same_line
+        previous = directives_at(path, line_number - 1).next_line
+        display_path = path.relative_to(root).as_posix()
+        for directive, directive_line in (
+            (same, line_number),
+            (previous, line_number - 1),
         ):
+            if directive is not None:
+                for message in _diagnostics_for(directive):
+                    reported.add((display_path, directive_line, message))
+        if _applies(same, rule_id) or _applies(previous, rule_id):
             suppressed += 1
         else:
             kept.append(finding)
+    if warnings is not None:
+        warnings.extend(
+            f"{where}:{line}: {message}"
+            for where, line, message in sorted(reported)
+        )
     return kept, suppressed
 
 
@@ -447,33 +568,77 @@ def _risk_level_counts(
     return counts
 
 
-def _suppression(
-    lines: list[str],
-    line_number: int,
-    directive: re.Pattern[str],
-) -> frozenset[str] | None:
-    if line_number < 1 or line_number > len(lines):
-        return None
-    match = directive.search(lines[line_number - 1])
-    if match is None:
-        return None
-    raw_rules = match.group(1)
-    if not raw_rules:
-        return frozenset()
-    return frozenset(
-        token.upper()
-        for token in re.split(r"[\s,]+", raw_rules)
-        if token
+_NO_DIRECTIVES = ParsedDirectives(same_line=None, next_line=None)
+
+
+def _known_set(known_rule_ids: Iterable[str] | None) -> frozenset[str]:
+    return frozenset(rule_id.upper() for rule_id in known_rule_ids or ())
+
+
+def _parse_keyword(
+    line: str,
+    keyword: re.Pattern[str],
+    known: frozenset[str],
+) -> Directive | None:
+    match = keyword.search(line)
+    return None if match is None else _parse_body(line[match.end():], known)
+
+
+def _scoped(ids: list[str], known: frozenset[str]) -> Directive:
+    return Directive(
+        kind="scoped",
+        ids=tuple(ids),
+        unrecognized=tuple(
+            rule_id
+            for rule_id in ids
+            if not _RECOGNIZED_NAMESPACE.match(rule_id) and rule_id not in known
+        ),
     )
 
 
-def _matches_suppression(
-    suppression: frozenset[str] | None,
-    rule_id: str,
-) -> bool:
-    return suppression is not None and (
-        not suppression or rule_id.upper() in suppression
-    )
+def _parse_body(body: str, known: frozenset[str]) -> Directive:
+    leading = _LEADING_WHITESPACE.match(body)
+    rest = body[leading.end():] if leading else body
+    if not rest or _REASON_DELIMITER.match(rest):
+        return Directive(kind="all")
+    ids: list[str] = []
+    after_comma = False
+    while True:
+        token = _TOKEN.match(rest).group()  # type: ignore[union-attr]
+        if _RULE_ID.fullmatch(token):
+            ids.append(token.upper())
+            rest = rest[len(token):]
+            separator = _LEADING_SEPARATORS.match(rest).group()  # type: ignore[union-attr]
+            after_comma = "," in separator
+            rest = rest[len(separator):]
+            if not rest or _REASON_DELIMITER.match(rest):
+                return _scoped(ids, known)
+            continue
+        if not ids or after_comma or _RULE_ID_LOOKALIKE.match(token):
+            # An empty token means the list opened with a comma.
+            return Directive(kind="invalid", token=token or rest[0])
+        # Whitespace, then prose: the legacy undelimited reason ends the list.
+        return _scoped(ids, known)
+
+
+def _diagnostics_for(directive: Directive) -> list[str]:
+    if directive.kind == "invalid":
+        return [
+            "invalid codeguard-ignore directive: unexpected token "
+            f"{quote_token(directive.token or '')}; it suppresses nothing "
+            '(put "--" before a free-text reason)'
+        ]
+    return [
+        f"codeguard-ignore names unrecognized rule id {quote_token(rule_id)}; "
+        "it matches no rule"
+        for rule_id in directive.unrecognized
+    ]
+
+
+def _applies(directive: Directive | None, rule_id: str) -> bool:
+    if directive is None or directive.kind == "invalid":
+        return False
+    return directive.kind == "all" or rule_id.upper() in directive.ids
 
 
 def _integer(value: Any, default: int) -> int:
@@ -483,6 +648,8 @@ def _integer(value: Any, default: int) -> int:
 __all__ = [
     "BASELINE_VERSION",
     "BaselineError",
+    "Directive",
+    "ParsedDirectives",
     "build_baseline",
     "deduplicate_findings",
     "enrich_findings",
@@ -490,6 +657,8 @@ __all__ = [
     "filter_suppressed",
     "fingerprint_finding",
     "load_baseline",
+    "parse_directives",
     "postprocess_envelope",
+    "quote_token",
     "write_baseline",
 ]
