@@ -645,26 +645,30 @@ def _scoped(ids: list[str], known: frozenset[str]) -> Directive:
 
 
 def _parse_body(body: str, known: frozenset[str]) -> Directive:
+    # Scans by offset rather than re-slicing the remainder after each token:
+    # slicing copies, which made a long id list quadratic in the line length
+    # (and scanned lines come from the repository under audit).
     leading = _LEADING_WHITESPACE.match(body)
-    rest = body[leading.end():] if leading else body
-    if not rest or _REASON_DELIMITER.match(rest):
+    pos = leading.end() if leading else 0
+    end = len(body)
+    if pos == end or _REASON_DELIMITER.match(body, pos):
         return Directive(kind="all")
     ids: list[str] = []
     after_comma = False
     while True:
-        token = _TOKEN.match(rest).group()  # type: ignore[union-attr]
+        token = _TOKEN.match(body, pos).group()  # type: ignore[union-attr]
         if _RULE_ID.fullmatch(token):
             ids.append(token.upper())
-            rest = rest[len(token):]
-            separator = _LEADING_SEPARATORS.match(rest).group()  # type: ignore[union-attr]
+            pos += len(token)
+            separator = _LEADING_SEPARATORS.match(body, pos).group()  # type: ignore[union-attr]
             after_comma = "," in separator
-            rest = rest[len(separator):]
-            if not rest or _REASON_DELIMITER.match(rest):
+            pos += len(separator)
+            if pos == end or _REASON_DELIMITER.match(body, pos):
                 return _scoped(ids, known)
             continue
         if not ids or after_comma or _RULE_ID_LOOKALIKE.match(token):
             # An empty token means the list opened with a comma.
-            return Directive(kind="invalid", token=token or rest[0])
+            return Directive(kind="invalid", token=token or body[pos])
         # Whitespace, then prose: the legacy undelimited reason ends the list.
         return _scoped(ids, known)
 

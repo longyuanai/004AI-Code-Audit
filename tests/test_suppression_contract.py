@@ -179,3 +179,23 @@ def test_envelope_without_suppression_keeps_everything(tmp_path: Path) -> None:
     assert len(result["findings"]) == 1
     assert result["summary"]["suppressed"] == 0
     assert result["warnings"] == []
+
+
+def test_long_id_lists_parse_in_linear_time() -> None:
+    """Scanned lines are repository content; re-slicing per token was quadratic.
+
+    300k ids (a 2 MB line) took tens of seconds before and ~0.3 s now; the
+    bound is loose enough for slow runners and still far below quadratic.
+    """
+    import time
+
+    from ai_code_audit.postprocess import parse_directives
+
+    line = "x = 1  # codeguard-ignore " + " ".join(["CG-001"] * 300_000)
+    started = time.perf_counter()
+    directive = parse_directives(line).same_line
+    elapsed = time.perf_counter() - started
+
+    assert directive is not None and directive.kind == "scoped"
+    assert len(directive.ids) == 300_000
+    assert elapsed < 5.0
