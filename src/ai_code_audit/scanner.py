@@ -16,6 +16,15 @@ from ai_code_audit.languages import (
 )
 from ai_code_audit.languages.base import walk_nodes
 from ai_code_audit.languages.typescript_lang import TypeScriptLanguageAdapter
+from ai_code_audit.source_lines import split_source_lines
+from ai_code_audit.taint import TaintAnalyzer
+
+# ai_code_audit.taint does real intra-procedural dataflow: it tracks a named
+# variable from source to sink and reports the propagation chain. It only
+# supports these three grammars, so the co-occurrence heuristic below still
+# covers C++ and TypeScript rather than those languages losing all coverage.
+DATAFLOW_LANGUAGES = frozenset({"python", "go", "java"})
+_TAINT_ANALYZER = TaintAnalyzer()
 
 EXCLUDED_PARTS = frozenset(
     {
@@ -95,20 +104,44 @@ def scan_repository(
         if adapter.name not in actual_languages:
             actual_languages.append(adapter.name)
         relative_path = source_file.relative_to(root).as_posix()
+        changed = (
+            line_ranges.get(relative_path)
+            if line_ranges is not None
+            else None
+        )
+
+        dataflow = _dataflow_findings(
+            source,
+            source_file=source_file,
+            relative_path=relative_path,
+            language=adapter.name,
+            changed_ranges=changed,
+        )
+        if dataflow is not None:
+            findings.extend(dataflow)
+        # The dataflow engine is intra-procedural. Where it analysed the file,
+        # its verdict stands inside each scope -- an unproven same-scope hit is,
+        # on the C3 corpus, always a false positive such as a constant eval
+        # after an unrelated input() -- and the heuristic only adds what the
+        # engine cannot see by design: a module-level source read by a sink
+        # inside a function.
+        proven_lines = {
+            int(item["metadata"]["line"])  # type: ignore[index]
+            for item in dataflow or ()
+        }
         findings.extend(
-            _security_findings(
+            finding
+            for finding in _security_findings(
                 source,
                 tree=tree,
                 function_spans=function_spans,
                 source_file=source_file,
                 relative_path=relative_path,
                 language=adapter.name,
-                changed_ranges=(
-                    line_ranges.get(relative_path)
-                    if line_ranges is not None
-                    else None
-                ),
+                changed_ranges=changed,
+                cross_scope_only=dataflow is not None,
             )
+            if int(finding["metadata"]["line"]) not in proven_lines  # type: ignore[index]
         )
 
     findings.sort(
@@ -157,6 +190,84 @@ def _parser_for_file(adapter: LanguageAdapter, path: Path):
     if isinstance(adapter, TypeScriptLanguageAdapter):
         return adapter.parser_for_extension(path.suffix)
     return adapter.parser()
+
+
+def _dataflow_findings(
+    source: bytes,
+    *,
+    source_file: Path,
+    relative_path: str,
+    language: str,
+    changed_ranges: Sequence[tuple[int, int]] | None,
+) -> list[dict[str, object]] | None:
+    """Proven source-to-sink flows from the AST dataflow engine.
+
+    Unlike the heuristic below, these name the variable that carries the
+    tainted value and list every propagation step, so they are reported at
+    full severity. Returns None when the engine does not cover the language
+    or could not analyse the file; the caller then falls back to the
+    heuristic.
+    """
+
+    if language not in DATAFLOW_LANGUAGES:
+        return None
+
+    try:
+        paths = _TAINT_ANALYZER.analyze(
+            source,
+            language,  # type: ignore[arg-type]
+            file=str(source_file),
+        )
+    except (ValueError, KeyError):
+        # A grammar or parse problem must not abort the whole scan; the
+        # heuristic still runs for this file.
+        return None
+
+    findings: list[dict[str, object]] = []
+    for path in paths:
+        line = path.sink.line
+        if changed_ranges is not None and not _line_in_ranges(
+            line, changed_ranges
+        ):
+            continue
+        digest = hashlib.sha256(
+            f"{relative_path}\0{language}\0{line}\0{path.variable}\0"
+            f"{path.sink.name}".encode()
+        ).hexdigest()[:12]
+        narrative = (
+            f"{path.variable!r} is read from {path.source.name} at line "
+            f"{path.source.line} and reaches {path.sink.name} at line "
+            f"{line} in {path.sink.function}."
+        )
+        findings.append(
+            {
+                "id": f"code-{language[:2]}-{digest}",
+                "source": "004",
+                "severity": "high",
+                "confidence": 0.9,
+                "title": f"Taint flow in {relative_path}:{line}",
+                "description": narrative,
+                "host": str(source_file),
+                "narrative": narrative,
+                "evidence": [step.render() for step in path.steps],
+                "tags": [language, "taint", "dataflow"],
+                "metadata": {
+                    "language": language,
+                    "line": line,
+                    "column": path.sink.column,
+                    "relative_path": relative_path,
+                    "rule_id": "004-taint-source-to-sink",
+                    "analysis": "dataflow",
+                    # The sink expression, not the rendered step: that one
+                    # carries line:column, and the fingerprint must survive
+                    # code moving up or down.
+                    "snippet": path.sink.detail,
+                    "variable": path.variable,
+                    "scope": path.sink.function,
+                },
+            }
+        )
+    return findings
 
 
 def _mask_literals(tree, source: bytes) -> bytes:
@@ -210,11 +321,12 @@ def _security_findings(
     relative_path: str,
     language: str,
     changed_ranges: Sequence[tuple[int, int]] | None,
+    cross_scope_only: bool = False,
 ) -> list[dict[str, object]]:
-    raw_lines = source.decode("utf-8", errors="replace").splitlines()
-    code_lines = _mask_literals(tree, source).decode(
-        "utf-8", errors="replace"
-    ).splitlines()
+    raw_lines = split_source_lines(source.decode("utf-8", errors="replace"))
+    code_lines = split_source_lines(
+        _mask_literals(tree, source).decode("utf-8", errors="replace")
+    )
 
     source_lines = [
         number
@@ -239,14 +351,14 @@ def _security_findings(
         # one. Require the source to be in the same function as the sink, or
         # at module level where it is genuinely in scope for it.
         sink_scope = _enclosing_span(line_number, function_spans)
+        if cross_scope_only and sink_scope is None:
+            continue
+        allowed_scopes = (None,) if cross_scope_only else (sink_scope, None)
         reaching = [
             candidate
             for candidate in source_lines
             if candidate <= line_number
-            and (
-                _enclosing_span(candidate, function_spans)
-                in (sink_scope, None)
-            )
+            and _enclosing_span(candidate, function_spans) in allowed_scopes
         ]
         if not reaching:
             continue

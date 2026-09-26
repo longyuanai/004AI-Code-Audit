@@ -3,8 +3,8 @@ from __future__ import annotations
 import sys
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import pytest
 
@@ -15,7 +15,24 @@ httpx = pytest.importorskip("httpx", reason="e2e gateway test needs httpx")
 uvicorn = pytest.importorskip("uvicorn", reason="e2e gateway test needs uvicorn")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SUITE_ROOT = PROJECT_ROOT.parents[1]
+
+
+def _find_suite_root() -> Path | None:
+    for candidate in PROJECT_ROOT.parents:
+        if (candidate / "000shared-integration" / "src").is_dir():
+            return candidate
+    return None
+
+
+_SUITE_ROOT = _find_suite_root()
+if _SUITE_ROOT is None:
+    # Skip, not error: CI and fresh clones have no sibling checkout, and a
+    # collection error here aborts the whole run before any test executes.
+    pytest.skip(
+        "requires the sibling 000shared-integration checkout",
+        allow_module_level=True,
+    )
+SUITE_ROOT: Path = _SUITE_ROOT
 INTEGRATION_SRC = SUITE_ROOT / "000shared-integration" / "src"
 if str(INTEGRATION_SRC) not in sys.path:
     sys.path.insert(0, str(INTEGRATION_SRC))

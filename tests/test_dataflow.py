@@ -1,10 +1,10 @@
-from codeguard.dataflow import (
+from ai_code_audit.dataflow import (
     DataflowAnalyzer,
     DataflowRule,
     register_dataflow_rule,
 )
-from codeguard.taint import register_taint_rule
-from codeguard.v05 import FindingSource, RuleContext, RuleEngine
+from ai_code_audit.taint import register_taint_rule
+from ai_code_audit.v05 import FindingSource, RuleContext, RuleEngine
 
 
 def test_python_tracks_return_value_into_second_function() -> None:

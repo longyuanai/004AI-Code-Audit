@@ -2,32 +2,43 @@
 
 > 本页是 AI-CodeGuard 当前文档集的入口，帮助你快速找到“总览、设计细节、开发说明、决策记录”四类信息。
 
-## 1. 先记住这三个术语
+> **2026-08-01 商用化基线**：后续实现与验收以
+> [商用版技术规范](./tech-spec.md) 和 [商用化 TODO](./TODO.md) 为准。
+> 旧路线图和专题文档如与二者冲突，按技术规范执行。
+
+## 1. 先记住这四个术语
 
 为了避免文档阅读时把“产品阶段”和“运行时阶段”混在一起，当前统一使用下面的术语：
 
-- **Phase 1**：当前已交付的产品阶段，指一个可运行、可测试的本地 CLI 基线
+- **Developer Preview**：当前产品成熟度；核心链路可用，但未通过商用 Beta Gate
 - **Stage 1**：扫描管道中的第一阶段，指静态预过滤（Tree-sitter 归一化解析 + 规则执行）
 - **Stage 2**：扫描管道中的第二阶段，指 LLM 二次确认 / 结果增强 / 可选修复建议生成
+- **fast / hybrid**：融合 Python CLI 的离线静态模式 / opt-in LLM 复核模式
 
 当前最准确的状态是：
 
-> **仓库当前仍处于 Phase 1，但运行时 `scan()` 已支持 Stage 1 + Stage 2，且 `rules.custom` 已接入运行时；`--dry-run` 会明确停在 Stage 1。**
+> **仓库当前处于 Developer Preview：保留的 TypeScript 主流程与新增 Python
+> 融合链路均有测试，但 canonical CLI、Gateway、CI 和发布工程尚未完成统一，
+> 因此不能宣称 Beta 或 GA。**
 
 ## 2. 推荐阅读顺序
 
 如果你第一次接触这个仓库，推荐按下面顺序阅读：
 
 1. [README.md](../README.md) — 项目总览与当前能力边界
-2. [ARCHITECTURE.md](../ARCHITECTURE.md) — 当前运行时架构与数据流
-3. [docs/design/TECHNICAL-SUMMARY.md](./design/TECHNICAL-SUMMARY.md) — 实现状态、验证结论与剩余缺口
-4. 按需进入 design / dev / adr 子文档
+2. [docs/tech-spec.md](./tech-spec.md) — 商用架构、契约、安全、质量与发布门槛
+3. [docs/TODO.md](./TODO.md) — issue、依赖、优先级和完成定义
+4. [ARCHITECTURE.md](../ARCHITECTURE.md) — 当前运行时架构与数据流
+5. [docs/design/TECHNICAL-SUMMARY.md](./design/TECHNICAL-SUMMARY.md) — 历史实现摘要
+6. 按需进入 design / dev / adr 子文档
 
 ## 3. 文档地图
 
 ### 3.1 总览文档
 
 - [README.md](../README.md) — 对外/对内都可使用的当前项目概览
+- [docs/tech-spec.md](./tech-spec.md) — 商用版唯一权威技术规范
+- [docs/TODO.md](./TODO.md) — 商用化执行清单与验收顺序
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — 当前架构、模块关系、数据流与实现边界
 - [docs/design/TECHNICAL-SUMMARY.md](./design/TECHNICAL-SUMMARY.md) — 当前实现完成度、验证状态与下一阶段优先级
 
@@ -104,10 +115,6 @@
 
 ## 6. 当前结论
 
-AI-CodeGuard 的文档集现在已经可以支持三件事：
-
-- 快速理解当前已交付能力
-- 准确区分 Stage 1 / Stage 2 / 已接线 custom rules / 后续规划项
-- 为下一步推进规则精度、custom rules 示例 / 错误提示补强与 CI 集成提供清晰基线
-
-如果后续继续扩展文档，建议优先保持这页导航与 README 的链接同步更新。
+后续开发先读 `tech-spec.md` 和 `TODO.md`。专题设计文档用于理解既有实现，
+历史路线图用于追溯决策，不再单独决定“已完成”或“可商用”。任何能力只有
+满足技术规范中的测试、CI、安全和发布 Gate 后，才能提升对外成熟度表述。

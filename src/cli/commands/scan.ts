@@ -96,6 +96,11 @@ export function createScanCommand(): Command {
           diffPath: opts.diff as string | undefined,
         });
 
+        // stderr, so JSON/SARIF on stdout or in --output-file stay unchanged.
+        for (const warning of result.warnings ?? []) {
+          console.error(`warning: ${warning}`);
+        }
+
         if (opts.writeBaseline) {
           // Snapshotting acknowledges the current findings; the run itself is
           // informational, so it never fails the build. Stage-2-dismissed

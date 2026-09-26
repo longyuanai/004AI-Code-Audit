@@ -193,3 +193,31 @@ LLM 深度分析是本项目的重要差异化方向，需要保留多提供商�
 - 文档可以把“runtime custom rule loading”与 `rules validate/create/test` 视为当前能力
 - 但不能把当前 custom rules 描述为完整语义 / 数据流规则平台
 - 如后续继续扩展，需要继续补充示例、错误提示、测试与路径语义说明
+
+---
+
+# ADR-006: Python `enrich` 子命令的退出码
+
+- **状态**: 已接受（本机验证，待评审）
+- **日期**: 2026-09-23
+- **决策者**: 项目团队
+
+## 背景
+
+C2 为 Python CLI 增加离线 CVE 增强子命令 `ai-code-audit enrich`。原 CLI 退出码为 0（成功）、1（`--fail-on` 门禁触发）、2（输入错误）。增强阶段可能 partial（缓存缺失/过期、非法 CVE）或 failed（模块或缓存不可用），需要让 CI 能区分“情报不完整”与“扫描门禁触发”，且不得覆盖门禁语义。
+
+## 决策
+
+- 0：成功。非严格模式下 partial/failed 仍为 0，状态写在报告顶层 `code_audit_enrichment` 与 stderr 摘要中，原扫描 Finding 保留。
+- 1：门禁触发，沿用 scan 语义；阈值为显式 `--fail-on`，否则沿用输入 `summary.gate.threshold`。与 3 同时满足时返回 1。
+- 2：参数、envelope 读取/校验或输出写入失败；不输出报告、不写输出文件。
+- 3：新增。仅在 `--require-intel` 时，阶段为 partial 或 failed；仍完整输出报告。
+
+## 理由
+
+门禁代表已发现的代码风险，优先级高于情报完整性，不能被新码掩盖。情报缺失不是代码缺陷，默认不应让流水线失败；需要强约束的调用方显式选择 `--require-intel`。
+
+## 后果
+
+- scan 的退出码不变；3 只出现在 `enrich --require-intel`。
+- 调用方在门禁触发（1）时需读取报告顶层阶段记录才能得知情报是否完整。

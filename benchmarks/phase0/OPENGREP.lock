@@ -1,0 +1,4 @@
+version=1.26.0
+asset=opengrep_windows_x86.exe
+sha256=4e6c0e201982cd72ca4aff5798a2ff133e17de8af3b00b460238fdda4dd266e3
+source=https://github.com/opengrep/opengrep/releases/tag/v1.26.0

@@ -1,0 +1,451 @@
+{
+  "description": "Cross-stack fingerprint contract for codeguardFingerprint/v1. src/scanner/baseline.ts (TypeScript) and src/ai_code_audit/fingerprint.py (Python, also used by the Opengrep backend) must produce exactly these values. tests/unit/fingerprint-contract.test.ts and tests/test_fingerprint_contract.py each read this file. The purpose of the field layout is to remove concatenation ambiguity between fields; a 64-bit truncated digest is not collision-free and is not claimed to be.",
+  "key": "codeguardFingerprint/v1",
+  "baselineVersion": 1,
+  "spec": {
+    "fields": "rule id, then path, then snippet, joined by U+0000 (NUL). File paths cannot contain NUL and rule ids do not use it (custom rule ids are unconstrained strings, so this is a convention there, not a guarantee); with NUL absent from the first two fields the split is unambiguous (see vectors field-shift-a / field-shift-b).",
+    "ruleId": "Used verbatim and case-sensitively. TypeScript: Finding.ruleId. Python: metadata.rule_id, else finding.id, else \"unknown\".",
+    "path": "Relative to the repository root, then every U+005C (backslash) is replaced by U+002F (slash). The repository root is the nearest ancestor of the scan base that contains a .git entry (a directory, or a file as in worktrees and submodules); without one it is the scan base itself. The scan base is the working directory for the TypeScript CLI and repo_path for Python. TypeScript reports this path as Finding.file; Python keeps metadata.relative_path relative to repo_path (the CodeAdapter envelope contract) and prefixes it with repo_path's position inside the repository only when computing the fingerprint.",
+    "snippet": "TypeScript: Finding.snippet. Python adapter only: metadata.snippet, else the last evidence entry, else description, else title; after normalisation a leading \"sink line N: \" / \"source line N: \" evidence prefix is removed. Cross-stack vectors below exercise the shared core, not the Python-only source selection.",
+    "whitespace": "Each maximal run of the canonicalWhitespace code points becomes one U+0020, then leading and trailing U+0020 are removed. The set is fixed here on purpose: JavaScript \\s and Python \\s differ (JS-only U+FEFF; Python-only U+001C-U+001F and U+0085) and both depend on the engine's Unicode version.",
+    "encoding": "UTF-8. An unpaired surrogate is encoded as U+FFFD (Node's behaviour; Python previously raised UnicodeEncodeError).",
+    "digest": "SHA-256, lowercase hex, first 16 characters (64 bits).",
+    "legacyPath": "Before this rule TypeScript used the path relative to the working directory and Python the path relative to repo_path. When that legacy path differs, baseline matching tries the canonical fingerprint first and the legacy one second, so a baseline written from a subdirectory by an older release keeps absorbing its findings. New baselines are always written canonically. Finding IDs keep their pre-existing derivation."
+  },
+  "canonicalWhitespace": [
+    "U+0009",
+    "U+000A",
+    "U+000B",
+    "U+000C",
+    "U+000D",
+    "U+0020",
+    "U+00A0",
+    "U+1680",
+    "U+2000",
+    "U+2001",
+    "U+2002",
+    "U+2003",
+    "U+2004",
+    "U+2005",
+    "U+2006",
+    "U+2007",
+    "U+2008",
+    "U+2009",
+    "U+200A",
+    "U+2028",
+    "U+2029",
+    "U+202F",
+    "U+205F",
+    "U+3000",
+    "U+FEFF"
+  ],
+  "vectors": [
+    {
+      "name": "basic",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "pool.query(`SELECT * FROM users WHERE id = ${id}`)",
+      "fingerprint": "b60320324c12b514"
+    },
+    {
+      "name": "posix-path",
+      "ruleId": "CG-001",
+      "path": "src/db/query.ts",
+      "snippet": "pool.query(x)",
+      "fingerprint": "f9a3248de0b2bafa"
+    },
+    {
+      "name": "windows-path",
+      "ruleId": "CG-001",
+      "path": "src\\db\\query.ts",
+      "snippet": "pool.query(x)",
+      "fingerprint": "f9a3248de0b2bafa"
+    },
+    {
+      "name": "mixed-separators",
+      "ruleId": "CG-001",
+      "path": "src\\db/query.ts",
+      "snippet": "pool.query(x)",
+      "fingerprint": "f9a3248de0b2bafa"
+    },
+    {
+      "name": "unicode-cjk",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "\u7528\u6237\u540d \u7f16\u7801\u6d4b\u8bd5",
+      "fingerprint": "8b52f031a6daf933"
+    },
+    {
+      "name": "unicode-astral",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "log(\"\ud83c\udf89\")",
+      "fingerprint": "ed32a012d5bf4aab"
+    },
+    {
+      "name": "ws-multiline",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "pool.query(\n  `SELECT 1`\n)",
+      "fingerprint": "a17ce85ee928626a"
+    },
+    {
+      "name": "ws-single-spaces",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "pool.query( `SELECT 1` )",
+      "fingerprint": "a17ce85ee928626a"
+    },
+    {
+      "name": "ws-tab-crlf",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "pool.query(\t`SELECT 1`\r\n)",
+      "fingerprint": "a17ce85ee928626a"
+    },
+    {
+      "name": "ws-leading-trailing",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "  \t pool.query(x) \n ",
+      "fingerprint": "4fdd06e54f5b85a1"
+    },
+    {
+      "name": "ws-plain",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "a b",
+      "fingerprint": "be01fedac4053f4f"
+    },
+    {
+      "name": "ws-nbsp",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "a\u00a0b",
+      "fingerprint": "be01fedac4053f4f"
+    },
+    {
+      "name": "ws-ideographic",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "a\u3000b",
+      "fingerprint": "be01fedac4053f4f"
+    },
+    {
+      "name": "ws-feff-collapsed",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "a\ufeffb",
+      "fingerprint": "be01fedac4053f4f"
+    },
+    {
+      "name": "ws-nel-preserved",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "a\u0085b",
+      "fingerprint": "44467e7544d8f3cd"
+    },
+    {
+      "name": "ws-file-separator-preserved",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "a\u001cb",
+      "fingerprint": "25a0970aa8efa4b6"
+    },
+    {
+      "name": "lone-surrogate",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "a\ud800b",
+      "fingerprint": "1ed51aa1b0212800"
+    },
+    {
+      "name": "replacement-char",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "a\ufffdb",
+      "fingerprint": "1ed51aa1b0212800"
+    },
+    {
+      "name": "rule-id-case-upper",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "x",
+      "fingerprint": "aa30e8f64dbefd15"
+    },
+    {
+      "name": "rule-id-case-lower",
+      "ruleId": "cg-001",
+      "path": "src/db.ts",
+      "snippet": "x",
+      "fingerprint": "05bf1419e442caf7"
+    },
+    {
+      "name": "rule-id-004",
+      "ruleId": "004-taint-source-to-sink",
+      "path": "app.py",
+      "snippet": "eval(value)",
+      "fingerprint": "a270c25032014894"
+    },
+    {
+      "name": "rule-id-opengrep",
+      "ruleId": "CG-OG-PY-001",
+      "path": "app.py",
+      "snippet": "eval(value)",
+      "fingerprint": "0a17211c498a5ac3"
+    },
+    {
+      "name": "empty-snippet",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": "",
+      "fingerprint": "48df31c05062808d"
+    },
+    {
+      "name": "whitespace-only-snippet",
+      "ruleId": "CG-001",
+      "path": "src/db.ts",
+      "snippet": " \t\n ",
+      "fingerprint": "48df31c05062808d"
+    },
+    {
+      "name": "field-shift-a",
+      "ruleId": "CG-001",
+      "path": "ab",
+      "snippet": "c",
+      "fingerprint": "16140a920f0e6dfd"
+    },
+    {
+      "name": "field-shift-b",
+      "ruleId": "CG-001",
+      "path": "a",
+      "snippet": "bc",
+      "fingerprint": "df68dd96c22c1a73"
+    }
+  ],
+  "equalities": [
+    [
+      "posix-path",
+      "windows-path",
+      "mixed-separators"
+    ],
+    [
+      "ws-multiline",
+      "ws-single-spaces",
+      "ws-tab-crlf"
+    ],
+    [
+      "ws-plain",
+      "ws-nbsp",
+      "ws-ideographic",
+      "ws-feff-collapsed"
+    ],
+    [
+      "lone-surrogate",
+      "replacement-char"
+    ],
+    [
+      "empty-snippet",
+      "whitespace-only-snippet"
+    ]
+  ],
+  "inequalities": [
+    [
+      "rule-id-case-upper",
+      "rule-id-case-lower"
+    ],
+    [
+      "ws-plain",
+      "ws-nel-preserved"
+    ],
+    [
+      "ws-plain",
+      "ws-file-separator-preserved"
+    ],
+    [
+      "field-shift-a",
+      "field-shift-b"
+    ]
+  ],
+  "baselineCases": [
+    {
+      "name": "duplicate-occurrences-are-counted",
+      "findings": [
+        "basic",
+        "basic",
+        "posix-path"
+      ],
+      "expect": {
+        "basic": 2,
+        "posix-path": 1
+      }
+    },
+    {
+      "name": "whitespace-variants-share-a-count",
+      "findings": [
+        "ws-multiline",
+        "ws-single-spaces"
+      ],
+      "expect": {
+        "ws-multiline": 2
+      }
+    },
+    {
+      "name": "windows-and-posix-paths-share-a-count",
+      "findings": [
+        "posix-path",
+        "windows-path"
+      ],
+      "expect": {
+        "posix-path": 2
+      }
+    }
+  ],
+  "baselineFilterCases": [
+    {
+      "name": "extra-copy-surfaces-as-new",
+      "baseline": {
+        "basic": 2
+      },
+      "findings": [
+        "basic",
+        "basic",
+        "basic"
+      ],
+      "expect": {
+        "kept": 1,
+        "baselined": 2
+      }
+    },
+    {
+      "name": "windows-path-matches-posix-baseline",
+      "baseline": {
+        "posix-path": 1
+      },
+      "findings": [
+        "windows-path"
+      ],
+      "expect": {
+        "kept": 0,
+        "baselined": 1
+      }
+    }
+  ],
+  "compatibility": {
+    "summary": "v1 keeps its meaning: the key and baseline version are unchanged. The only inputs whose fingerprint differs from the pre-contract implementations are listed here, so no change is silent.",
+    "typescript": {
+      "changedVectors": {
+        "windows-path": {
+          "before": "c8119030c50feefa",
+          "after": "f9a3248de0b2bafa"
+        },
+        "mixed-separators": {
+          "before": "cf106fc1e2207b36",
+          "after": "f9a3248de0b2bafa"
+        }
+      },
+      "impact": "Only a Finding.file containing a backslash changes. The orchestrator builds Finding.file with relative(...).replace(/\\\\/g, '/'), so no baseline or SARIF fingerprint written by the CLI is affected."
+    },
+    "python": {
+      "changedVectors": {
+        "ws-feff-collapsed": {
+          "before": "f3320f566f558fe5",
+          "after": "be01fedac4053f4f"
+        },
+        "ws-nel-preserved": {
+          "before": "be01fedac4053f4f",
+          "after": "44467e7544d8f3cd"
+        },
+        "ws-file-separator-preserved": {
+          "before": "be01fedac4053f4f",
+          "after": "25a0970aa8efa4b6"
+        },
+        "lone-surrogate": {
+          "before": "ERROR:UnicodeEncodeError",
+          "after": "1ed51aa1b0212800"
+        }
+      },
+      "impact": "Only snippets containing U+FEFF, U+001C-U+001F or U+0085 change, plus unpaired surrogates, which previously raised UnicodeEncodeError. The Python baseline writer is not on main; a baseline written from such a snippet reports that finding once as new; regenerate it with the baseline writer. Fingerprints already stored in metadata.fingerprint are still honoured verbatim and never recomputed."
+    }
+  },
+  "pathBasisCases": [
+    {
+      "name": "scan-from-repository-root",
+      "layout": [
+        "repo/.git/",
+        "repo/src/app.js"
+      ],
+      "base": "repo",
+      "file": "repo/src/app.js",
+      "expectPath": "src/app.js",
+      "expectLegacyPath": "src/app.js"
+    },
+    {
+      "name": "scan-from-subdirectory",
+      "layout": [
+        "repo/.git/",
+        "repo/src/app.js"
+      ],
+      "base": "repo/src",
+      "file": "repo/src/app.js",
+      "expectPath": "src/app.js",
+      "expectLegacyPath": "app.js"
+    },
+    {
+      "name": "scan-from-nested-subdirectory",
+      "layout": [
+        "repo/.git/",
+        "repo/a/b/c.js"
+      ],
+      "base": "repo/a/b",
+      "file": "repo/a/b/c.js",
+      "expectPath": "a/b/c.js",
+      "expectLegacyPath": "c.js"
+    },
+    {
+      "name": "no-repository-falls-back-to-base",
+      "layout": [
+        "plain/src/app.js"
+      ],
+      "base": "plain/src",
+      "file": "plain/src/app.js",
+      "expectPath": "app.js",
+      "expectLegacyPath": "app.js"
+    },
+    {
+      "name": "git-file-marks-a-worktree-root",
+      "layout": [
+        "wt/.git",
+        "wt/src/x.js"
+      ],
+      "base": "wt/src",
+      "file": "wt/src/x.js",
+      "expectPath": "src/x.js",
+      "expectLegacyPath": "x.js"
+    },
+    {
+      "name": "submodule-file-seen-from-the-outer-repository",
+      "layout": [
+        "outer/.git/",
+        "outer/sub/.git",
+        "outer/sub/lib/y.js"
+      ],
+      "base": "outer",
+      "file": "outer/sub/lib/y.js",
+      "expectPath": "sub/lib/y.js",
+      "expectLegacyPath": "sub/lib/y.js"
+    },
+    {
+      "name": "submodule-scanned-from-inside",
+      "layout": [
+        "outer/.git/",
+        "outer/sub/.git",
+        "outer/sub/lib/y.js"
+      ],
+      "base": "outer/sub/lib",
+      "file": "outer/sub/lib/y.js",
+      "expectPath": "lib/y.js",
+      "expectLegacyPath": "y.js"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ConfigSchema } from '../../src/config/schema.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 

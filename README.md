@@ -105,18 +105,18 @@ ABI tag 与当前解释器一致；否则直接 `pip install` 对应版本即可
 
 ```powershell
 $payload = '{"repo_path":"C:\\work\\service","languages":["python","go","java"]}'
-python -m ai_codeguard.cli scan --input $payload --json
+python -m codeguard.cli scan --input $payload --json
 
 # 也可从 stdin 读取 payload
 '{"repo_path":"samples/mini_repo"}' |
-  python -m ai_codeguard.cli scan --json
+  python -m codeguard.cli scan --json
 ```
 
 Git URL 使用浅克隆；`--repo-path` 同时提供时可在网络或 clone 失败后
 安全降级到本地仓库：
 
 ```powershell
-python -m ai_codeguard.cli scan `
+python -m codeguard.cli scan `
   --git-url https://example.invalid/team/service.git `
   --repo-path C:\work\service `
   --json
@@ -142,10 +142,81 @@ clone 失败。
 ```bash
 # 允许本地镜像
 CODEGUARD_GIT_ALLOWED_SCHEMES=https,ssh,file \
-  python -m ai_codeguard.cli scan --git-url file:///srv/mirror/service.git --json
+  python -m ai_code_audit scan --git-url file:///srv/mirror/service.git --json
 ```
 
 注意这是 scheme 层面的控制，不做主机白名单：`https://` 指向内网地址仍会放行。
+
+### 可插拔静态分析后端
+
+`ai_code_audit` 的 v0.6 CLI 支持 `builtin`、`auto` 和 `opengrep`
+后端。为保持冻结契约和现有安装兼容，未指定 `backend` 时仍使用
+`builtin`；`auto` 在 Opengrep 未配置时会带 warning 降级。
+
+外部可执行文件和规则目录只能由受信任的进程环境配置，payload
+不能指定任意程序路径：
+
+```powershell
+$env:PYTHONPATH = "src;$((Resolve-Path '.python-deps').Path)"
+$env:CODEGUARD_OPENGREP_PATH = "C:\tools\opengrep\opengrep.exe"
+$env:CODEGUARD_OPENGREP_RULES = "C:\work\codeguard-rules"
+$env:CODEGUARD_BACKEND_TIMEOUT = "120"
+
+$payload = @{
+  repo_path = "C:\work\service"
+  backend = "opengrep"
+} | ConvertTo-Json -Compress
+
+$payload |
+  python -m ai_code_audit scan --json
+```
+
+Opengrep 以参数数组和 `shell=False` 启动，并统一处理 UTF-8、超时、
+退出码、Windows 路径和 rule ID。结果继续输出 `source="004"` 的
+v0.5 §15 envelope。Phase 0 选型数据见
+[`docs/phase0-benchmark-report.md`](docs/phase0-benchmark-report.md)。
+
+### 敏感数据分类与风险排序
+
+扫描结果会在本地使用确定性分类器识别凭据、个人数据、健康数据、
+支付数据、认证数据和机密业务数据。分类器仅检查 Finding 附近的
+有限代码窗口与已有 taint trace，不把原始敏感值复制进输出。
+
+分类写入 `metadata.data_classifications` 和 `data:<category>` tags；
+风险评分写入 `metadata.risk`。评分公式为：
+
+```text
+severity_weight * confidence * reachability_weight
+  * data_sensitivity_weight * change_scope_weight
+```
+
+每个权重和最终等级都随 Finding 输出，便于审计和测试。冻结的
+`id/source/severity/confidence/title/host/evidence` 字段不会被改写；
+结果按风险分数从高到低稳定排序。Git diff 扫描会提高变更范围内
+Finding 的 `change_scope_weight`。
+
+### Hybrid LLM 复核
+
+在 JSON payload 中设置 `"mode":"hybrid"`，会在静态扫描、去重、
+分类和风险排序之后，仅把 high/critical 或低置信度 Finding 的最小
+脱敏上下文交给 `LLMRouter.chat(TaskTier.CHEAP, ChatRequest)`：
+
+```powershell
+$env:CODEGUARD_TRIAGE_MAX_FINDINGS = "20"
+$env:CODEGUARD_TRIAGE_MODEL_VERSION = "cheap-route-v1"
+$payload = @{
+  repo_path = "C:\work\service"
+  backend = "opengrep"
+  mode = "hybrid"
+} | ConvertTo-Json -Compress
+
+$payload | python -m ai_code_audit scan --json
+```
+
+真假判断、中文解释、修复建议、模型和 token 用量写入
+`metadata.llm_triage`。LLM 否定结果不会删除静态 Finding；路由、网络、
+超时或 JSON 解析失败也只记录降级状态。默认 `mode` 为 `fast`，不会
+发起 LLM 请求。
 
 ### PR review bot (BYO-key)
 
@@ -169,7 +240,7 @@ node dist/index.js scan ./src --dry-run --baseline .codeguard-baseline.json
 
 Baseline fingerprints hash the rule + file + normalized snippet — **no line numbers** — so unrelated edits that shift code up or down don't resurrect acknowledged findings, while any genuinely new finding (or an extra copy of an acknowledged one) still surfaces. The scan reports how many findings the baseline absorbed (`scan.baselined` in JSON, a summary line in text). Commit the baseline file and shrink it over time as findings get fixed.
 
-Two rules of thumb: **always run scans from the repository root** (fingerprints embed cwd-relative paths, so a different working directory silently mismatches the whole baseline), and write baselines from *unfiltered* scans (`--write-baseline` rejects `--severity` for this reason; Stage 2 dismissals are included in the snapshot so later runs don't re-pay to re-triage them).
+Fingerprints use repository-relative paths (relative to the nearest ancestor of the working directory that contains `.git`, or the working directory itself outside a repository), so a scan run from a subdirectory matches the same baseline, `--diff` and SARIF locations as one run from the root. Baselines written by earlier releases, which used working-directory-relative paths, still match; `--write-baseline` writes the repository-relative form. Write baselines from *unfiltered* scans (`--write-baseline` rejects `--severity` for this reason; Stage 2 dismissals are included in the snapshot so later runs don't re-pay to re-triage them).
 
 ### Measuring Stage 2 triage accuracy
 

@@ -59,8 +59,14 @@ def test_v2_provider_propagates_router_errors(stub_router) -> None:
         )
 
 
-def test_legacy_typescript_providers_are_retained() -> None:
-    providers = Path(__file__).resolve().parents[1] / "src" / "analyzer" / "providers"
-    assert (providers / "claude.ts").is_file()
-    assert (providers / "openai.ts").is_file()
+def test_legacy_typescript_provider_sdks_are_not_shipped() -> None:
+    # main 74f0227 removed the unused SDK-backed TS providers; provider
+    # selection goes through the shared LLMRouter (the v2 adapters here).
+    root = Path(__file__).resolve().parents[1]
+    providers = root / "src" / "analyzer" / "providers"
+    assert not (providers / "claude.ts").exists()
+    assert not (providers / "openai.ts").exists()
+    package = (root / "package.json").read_text(encoding="utf-8")
+    assert '"openai"' not in package
+    assert '"@anthropic-ai/sdk"' not in package
 

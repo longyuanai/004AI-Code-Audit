@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from ai_codeguard.cli import scan_payload
-from codeguard.rules import default
-from codeguard.rules.taint import TaintSourceToSinkRule
-from codeguard.v05 import (
+from ai_code_audit.hybrid_cli import scan_payload
+from ai_code_audit.rules import default
+from ai_code_audit.rules.taint import TaintSourceToSinkRule
+from ai_code_audit.v05 import (
     USING_SHARED_V05,
     Finding,
     FindingSource,

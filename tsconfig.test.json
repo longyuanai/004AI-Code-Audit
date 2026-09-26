@@ -1,0 +1,23 @@
+{
+  // The build tsconfig excludes tests/ (they must not land in dist/), which
+  // left every test file unchecked by `tsc`. Type errors in tests only
+  // surfaced at runtime, if at all. This config type-checks them without
+  // emitting, and `npm run typecheck` runs both.
+  //
+  // tests/fixtures, tests/corpus and tests/corpus-triage are scan inputs --
+  // deliberately malformed or vulnerable sources -- so they stay excluded.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["tests/**/*.ts", "src/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests/fixtures",
+    "tests/corpus",
+    "tests/corpus-triage"
+  ]
+}

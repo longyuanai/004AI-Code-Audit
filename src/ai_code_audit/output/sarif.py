@@ -85,7 +85,7 @@ def finding_to_result(finding: Mapping[str, Any]) -> dict[str, Any]:
         or finding.get("title")
         or "CodeGuard finding"
     )
-    return {
+    result = {
         "ruleId": str(
             metadata.get("rule_id")
             or finding.get("id")
@@ -116,34 +116,52 @@ def finding_to_result(finding: Mapping[str, Any]) -> dict[str, Any]:
             "longyuanai:finding-id": str(finding.get("id", "")),
         },
     }
+    fingerprint = metadata.get("fingerprint")
+    if isinstance(fingerprint, str) and fingerprint:
+        result["partialFingerprints"] = {
+            "codeguardFingerprint/v1": fingerprint
+        }
+    code_flows = _sarif_code_flows(metadata.get("code_flows"))
+    if code_flows:
+        result["codeFlows"] = code_flows
+    # Offline CVE intel (C2) is copied verbatim, including null unknowns.
+    intel = metadata.get("code_audit_enrichment")
+    properties = result["properties"]
+    if isinstance(intel, Mapping) and isinstance(properties, dict):
+        properties["longyuanai:cve-intel"] = dict(intel)
+    return result
 
 
 def export_sarif(
     findings: Iterable[Mapping[str, Any]],
     *,
     tool_version: str | None = None,
+    run_properties: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a SARIF 2.1.0 document.
 
     `tool_version` defaults to this package's version rather than a literal,
     which previously read "0.6" and could not track pyproject (0.6.0).
+    `run_properties` (e.g. the enrich stage record) is omitted when empty so
+    plain scan SARIF stays unchanged.
     """
 
+    run: dict[str, Any] = {
+        "tool": {
+            "driver": {
+                "name": DRIVER_NAME,
+                "version": tool_version or __version__,
+                "informationUri": DRIVER_INFORMATION_URI,
+            }
+        },
+        "results": [finding_to_result(item) for item in findings],
+    }
+    if run_properties:
+        run["properties"] = dict(run_properties)
     return {
         "version": SARIF_VERSION,
         "$schema": SARIF_SCHEMA_URL,
-        "runs": [
-            {
-                "tool": {
-                    "driver": {
-                        "name": DRIVER_NAME,
-                        "version": tool_version or __version__,
-                        "informationUri": DRIVER_INFORMATION_URI,
-                    }
-                },
-                "results": [finding_to_result(item) for item in findings],
-            }
-        ],
+        "runs": [run],
     }
 
 
@@ -172,6 +190,48 @@ def _artifact_uri(
 
 def _positive_int(value: Any, *, default: int) -> int:
     return value if isinstance(value, int) and value > 0 else default
+
+
+def _sarif_code_flows(raw_steps: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw_steps, list):
+        return []
+    locations: list[dict[str, Any]] = []
+    for step in raw_steps:
+        if not isinstance(step, Mapping):
+            continue
+        path = step.get("path")
+        if not isinstance(path, str) or not path:
+            continue
+        line = _positive_int(step.get("line"), default=1)
+        column = _positive_int(step.get("column"), default=1)
+        end_line = _positive_int(step.get("end_line"), default=line)
+        end_column = _positive_int(
+            step.get("end_column"),
+            default=column,
+        )
+        locations.append(
+            {
+                "location": {
+                    "message": {
+                        "text": str(step.get("message") or step.get("kind") or "")
+                    },
+                    "physicalLocation": {
+                        "artifactLocation": {
+                            "uri": path.replace("\\", "/")
+                        },
+                        "region": {
+                            "startLine": line,
+                            "startColumn": column,
+                            "endLine": end_line,
+                            "endColumn": end_column,
+                        },
+                    },
+                }
+            }
+        )
+    if not locations:
+        return []
+    return [{"threadFlows": [{"locations": locations}]}]
 
 
 __all__ = [

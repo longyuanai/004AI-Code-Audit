@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { Command } from 'commander';
 import { createRulesCommand } from '../../src/cli/commands/rules.js';
+import { findRepositoryRoot } from '../../src/scanner/repository.js';
 
 const FIXTURES_DIR = resolve(__dirname, '../fixtures');
 const originalCwd = process.cwd();
@@ -72,7 +73,11 @@ describe('rules test command', () => {
       expect(parsed.scan.estimatedCost).toBe(0);
       expect(parsed.findings).toHaveLength(1);
       expect(parsed.findings[0].ruleId).toBe('CR-401');
-      expect(parsed.findings[0].file).toBe('custom-target.ts');
+      // Repository-relative, not cwd-relative: the temp dir sits inside the
+      // repository holding these tests.
+      const expected = relative(findRepositoryRoot(tempDir), sourceFile).replace(/\\/g, '/');
+      expect(expected).toMatch(/tmp-rules-test-command-[^/]+\/custom-target\.ts$/);
+      expect(parsed.findings[0].file).toBe(expected);
       expect(process.exitCode).toBe(1);
     });
   });

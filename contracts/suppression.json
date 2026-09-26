@@ -1,0 +1,1119 @@
+{
+  "description": "Cross-stack contract for inline codeguard-ignore directives. src/scanner/suppression.ts (TypeScript) and src/ai_code_audit/postprocess.py (Python) must parse and apply directives identically. tests/unit/suppression-contract.test.ts and tests/test_suppression_contract.py each read this file: directiveCases through the directive parser, filterCases through the real filtering entry points (filterSuppressed / filter_suppressed).",
+  "version": 1,
+  "grammar": {
+    "keywords": {
+      "sameLine": "codeguard-ignore",
+      "nextLine": "codeguard-ignore-next-line",
+      "caseSensitive": true,
+      "boundary": "A keyword is recognised only when not preceded by [A-Za-z0-9_-] and not followed by [A-Za-z0-9_-], so xcodeguard-ignore, not_codeguard-ignore, codeguard-ignored and codeguard-ignore-list.md are not directives."
+    },
+    "ruleIdSyntax": "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+$, case-insensitive, compared upper-cased",
+    "ruleIdLookalike": "^[A-Za-z0-9]+- (something that starts like a rule id but is not one, e.g. CG-002. or CG-)",
+    "recognizedNamespaces": [
+      "CG-",
+      "004-"
+    ],
+    "separators": "Commas and canonical whitespace (the canonicalWhitespace set in contracts/fingerprint.json).",
+    "reasonDelimiters": [
+      "--",
+      "—"
+    ],
+    "rules": [
+      "1. Nothing after the keyword, or a reason delimiter immediately after it, is a bare directive: every rule on the target line is suppressed.",
+      "2. Otherwise the text after the keyword is a rule-id list: ids separated by commas and/or whitespace. Only the listed rules are suppressed.",
+      "3. A reason delimiter ends the list; everything after it is free text and is never inspected.",
+      "4. The first item must be a syntactically valid rule id. If it is not, the directive is invalid.",
+      "5. After a comma the next item must be a valid rule id, or the directive is invalid.",
+      "6. After whitespace only, the next item may be a valid rule id (the list continues), a rule-id lookalike (the directive is invalid), or anything else (legacy undelimited reason: the list ends there).",
+      "7. An invalid directive suppresses nothing. The finding is kept and a diagnostic is reported. It never falls back to suppressing every rule and never applies a partial list.",
+      "8. A syntactically valid id outside the recognized namespaces and not in the caller's known rule ids is kept in the list (it simply matches no finding) and produces an 'unrecognized' diagnostic.",
+      "9. With inline suppression disabled no directive is parsed, every finding is kept and no diagnostic is reported."
+    ],
+    "diagnostics": {
+      "invalid": "invalid codeguard-ignore directive: unexpected token {token}; it suppresses nothing (put \"--\" before a free-text reason)",
+      "unrecognized": "codeguard-ignore names unrecognized rule id {id}; it matches no rule",
+      "quoting": "{token} and {id} are rendered in double quotes; backslash and double quote are backslash-escaped, and U+0000-U+001F, U+007F-U+009F and unpaired surrogates are written as \\uXXXX (lowercase hex), so a crafted comment cannot inject terminal control sequences into CI logs.",
+      "location": "Diagnostics point at the directive's own line (for next-line directives, the line above the finding). The Python envelope and the TypeScript CLI render them as \"{path}:{line}: {message}\". One diagnostic per directive line and message, however many findings it affects, sorted by line then message. Diagnostics are reported only for directives that target a line with a finding."
+    },
+    "lineNumbering": "Lines are separated by U+000A only. CRLF therefore counts once, and a trailing U+000D belongs to the line. CR alone, VT, FF, FS/GS/RS, NEL, LS and PS do not start a new line. This is the rule tree-sitter applies on both stacks (and so the rule behind every finding's line number) and the one GitHub uses for SARIF regions; Python's str.splitlines() and universal-newline reading do not follow it."
+  },
+  "directiveCases": [
+    {
+      "name": "bare",
+      "line": "danger(x); // codeguard-ignore",
+      "sameLine": {
+        "kind": "all"
+      },
+      "nextLine": null
+    },
+    {
+      "name": "bare-trailing-whitespace",
+      "line": "danger(x); // codeguard-ignore  \t",
+      "sameLine": {
+        "kind": "all"
+      },
+      "nextLine": null
+    },
+    {
+      "name": "bare-with-dashdash-reason",
+      "line": "danger(x); // codeguard-ignore -- vendored, see TYPO-999",
+      "sameLine": {
+        "kind": "all"
+      },
+      "nextLine": null
+    },
+    {
+      "name": "bare-with-emdash-reason",
+      "line": "danger(x); // codeguard-ignore — vendored",
+      "sameLine": {
+        "kind": "all"
+      },
+      "nextLine": null
+    },
+    {
+      "name": "single-cg",
+      "line": "danger(x); // codeguard-ignore CG-001",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "single-004",
+      "line": "danger(x); // codeguard-ignore 004-taint-source-to-sink",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "004-TAINT-SOURCE-TO-SINK"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "opengrep-id",
+      "line": "eval(x)  # codeguard-ignore CG-OG-PY-001",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-OG-PY-001"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "rule-id-case-insensitive",
+      "line": "danger(x); // codeguard-ignore cg-001",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "list-comma-space",
+      "line": "danger(x); // codeguard-ignore CG-001, CG-010",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001",
+          "CG-010"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "list-comma-only",
+      "line": "danger(x); // codeguard-ignore CG-001,CG-010",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001",
+          "CG-010"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "list-space-only",
+      "line": "danger(x); // codeguard-ignore CG-001 CG-010",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001",
+          "CG-010"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "list-tab-separated",
+      "line": "danger(x); // codeguard-ignore\tCG-001,\tCG-010",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001",
+          "CG-010"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "list-nbsp-separated",
+      "line": "danger(x); // codeguard-ignore CG-001",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "list-mixed-namespaces",
+      "line": "danger(x); // codeguard-ignore CG-001, 004-taint-source-to-sink",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001",
+          "004-TAINT-SOURCE-TO-SINK"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "list-trailing-comma",
+      "line": "danger(x); // codeguard-ignore CG-001,",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "reason-dashdash",
+      "line": "danger(x); // codeguard-ignore CG-001 -- reviewed, input is constant",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "reason-emdash",
+      "line": "danger(x); // codeguard-ignore CG-002 — reviewed, input is constant",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-002"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "reason-after-comma",
+      "line": "danger(x); // codeguard-ignore CG-001, -- reviewed",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "reason-legacy-undelimited-prose",
+      "line": "danger(x); // codeguard-ignore CG-001 reviewed: input is a constant",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "unrecognized-only",
+      "line": "danger(x); // codeguard-ignore TYPO-123",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "TYPO-123"
+        ],
+        "unrecognized": [
+          "TYPO-123"
+        ]
+      },
+      "nextLine": null
+    },
+    {
+      "name": "unrecognized-in-list",
+      "line": "danger(x); // codeguard-ignore CG-001, TYPO-999",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001",
+          "TYPO-999"
+        ],
+        "unrecognized": [
+          "TYPO-999"
+        ]
+      },
+      "nextLine": null
+    },
+    {
+      "name": "custom-id-known",
+      "line": "danger(x); // codeguard-ignore CR-301",
+      "knownRuleIds": [
+        "CR-301"
+      ],
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CR-301"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": null
+    },
+    {
+      "name": "custom-id-unknown-to-caller",
+      "line": "danger(x); // codeguard-ignore CR-301",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CR-301"
+        ],
+        "unrecognized": [
+          "CR-301"
+        ]
+      },
+      "nextLine": null
+    },
+    {
+      "name": "invalid-first-item-prose",
+      "line": "danger(x); // codeguard-ignore reviewed and safe",
+      "sameLine": {
+        "kind": "invalid",
+        "token": "reviewed"
+      },
+      "nextLine": null
+    },
+    {
+      "name": "invalid-truncated-id",
+      "line": "danger(x); // codeguard-ignore CG-",
+      "sameLine": {
+        "kind": "invalid",
+        "token": "CG-"
+      },
+      "nextLine": null
+    },
+    {
+      "name": "invalid-punctuation-on-first-id",
+      "line": "danger(x); // codeguard-ignore CG-001:",
+      "sameLine": {
+        "kind": "invalid",
+        "token": "CG-001:"
+      },
+      "nextLine": null
+    },
+    {
+      "name": "invalid-glued-delimiter",
+      "line": "danger(x); // codeguard-ignore CG-001--reason",
+      "sameLine": {
+        "kind": "invalid",
+        "token": "CG-001--reason"
+      },
+      "nextLine": null
+    },
+    {
+      "name": "invalid-after-comma",
+      "line": "danger(x); // codeguard-ignore CG-001, reviewed",
+      "sameLine": {
+        "kind": "invalid",
+        "token": "reviewed"
+      },
+      "nextLine": null
+    },
+    {
+      "name": "invalid-lookalike-after-space",
+      "line": "danger(x); // codeguard-ignore CG-001 CG-002.",
+      "sameLine": {
+        "kind": "invalid",
+        "token": "CG-002."
+      },
+      "nextLine": null
+    },
+    {
+      "name": "next-line-bare",
+      "line": "// codeguard-ignore-next-line",
+      "sameLine": null,
+      "nextLine": {
+        "kind": "all"
+      }
+    },
+    {
+      "name": "next-line-scoped",
+      "line": "# codeguard-ignore-next-line CG-OG-PY-001",
+      "sameLine": null,
+      "nextLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-OG-PY-001"
+        ],
+        "unrecognized": []
+      }
+    },
+    {
+      "name": "next-line-invalid",
+      "line": "// codeguard-ignore-next-line TYPO",
+      "sameLine": null,
+      "nextLine": {
+        "kind": "invalid",
+        "token": "TYPO"
+      }
+    },
+    {
+      "name": "both-directives-on-one-line",
+      "line": "x(); // codeguard-ignore CG-001 // codeguard-ignore-next-line CG-002",
+      "sameLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-001"
+        ],
+        "unrecognized": []
+      },
+      "nextLine": {
+        "kind": "scoped",
+        "ids": [
+          "CG-002"
+        ],
+        "unrecognized": []
+      }
+    },
+    {
+      "name": "boundary-embedded-prefix",
+      "line": "xcodeguard-ignore CG-001",
+      "sameLine": null,
+      "nextLine": null
+    },
+    {
+      "name": "boundary-underscore-prefix",
+      "line": "not_codeguard-ignore",
+      "sameLine": null,
+      "nextLine": null
+    },
+    {
+      "name": "boundary-dash-prefix",
+      "line": "x-codeguard-ignore CG-001",
+      "sameLine": null,
+      "nextLine": null
+    },
+    {
+      "name": "boundary-past-tense",
+      "line": "codeguard-ignored something",
+      "sameLine": null,
+      "nextLine": null
+    },
+    {
+      "name": "boundary-doc-reference",
+      "line": "// see codeguard-ignore-list.md for policy",
+      "sameLine": null,
+      "nextLine": null
+    },
+    {
+      "name": "boundary-next-line-suffix",
+      "line": "// codeguard-ignore-next-lines CG-001",
+      "sameLine": null,
+      "nextLine": null
+    },
+    {
+      "name": "keyword-case-sensitive",
+      "line": "// CodeGuard-Ignore CG-001",
+      "sameLine": null,
+      "nextLine": null
+    },
+    {
+      "name": "no-directive",
+      "line": "danger(x);",
+      "sameLine": null,
+      "nextLine": null
+    }
+  ],
+  "filterCases": [
+    {
+      "name": "same-line-list-suppresses-only-the-named-rule",
+      "source": [
+        "query(a); exec(b); // codeguard-ignore CG-001"
+      ],
+      "findings": [
+        [
+          1,
+          "CG-001"
+        ],
+        [
+          1,
+          "CG-002"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            1,
+            "CG-002"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "python-namespace-id-no-longer-suppresses-everything",
+      "source": [
+        "x(); // codeguard-ignore 004-taint-source-to-sink"
+      ],
+      "findings": [
+        [
+          1,
+          "CG-001"
+        ],
+        [
+          1,
+          "004-taint-source-to-sink"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            1,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "unknown-id-is-not-a-wildcard",
+      "source": [
+        "eval(x)  # codeguard-ignore TYPO-123"
+      ],
+      "findings": [
+        [
+          1,
+          "CG-OG-PY-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            1,
+            "CG-OG-PY-001"
+          ]
+        ],
+        "suppressed": 0,
+        "diagnostics": [
+          {
+            "line": 1,
+            "message": "codeguard-ignore names unrecognized rule id \"TYPO-123\"; it matches no rule"
+          }
+        ]
+      }
+    },
+    {
+      "name": "next-line-targets-only-the-following-line",
+      "source": [
+        "// codeguard-ignore-next-line CG-001",
+        "query(a);",
+        "query(b);"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "same-line-directive-does-not-leak-to-next-line",
+      "source": [
+        "a(); // codeguard-ignore",
+        "b();"
+      ],
+      "findings": [
+        [
+          1,
+          "CG-001"
+        ],
+        [
+          2,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            2,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "invalid-list-keeps-finding-and-reports",
+      "source": [
+        "x(); // codeguard-ignore CG-001, reviewed"
+      ],
+      "findings": [
+        [
+          1,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            1,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 0,
+        "diagnostics": [
+          {
+            "line": 1,
+            "message": "invalid codeguard-ignore directive: unexpected token \"reviewed\"; it suppresses nothing (put \"--\" before a free-text reason)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "valid-prefix-is-not-applied-when-the-list-is-invalid",
+      "source": [
+        "x(); y(); // codeguard-ignore CG-001 CG-002."
+      ],
+      "findings": [
+        [
+          1,
+          "CG-001"
+        ],
+        [
+          1,
+          "CG-002"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            1,
+            "CG-001"
+          ],
+          [
+            1,
+            "CG-002"
+          ]
+        ],
+        "suppressed": 0,
+        "diagnostics": [
+          {
+            "line": 1,
+            "message": "invalid codeguard-ignore directive: unexpected token \"CG-002.\"; it suppresses nothing (put \"--\" before a free-text reason)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "invalid-next-line-directive-reports-its-own-line",
+      "source": [
+        "// codeguard-ignore-next-line CG-",
+        "query(a);"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            2,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 0,
+        "diagnostics": [
+          {
+            "line": 1,
+            "message": "invalid codeguard-ignore directive: unexpected token \"CG-\"; it suppresses nothing (put \"--\" before a free-text reason)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "one-diagnostic-per-directive",
+      "source": [
+        "x(); y(); // codeguard-ignore CG-001:"
+      ],
+      "findings": [
+        [
+          1,
+          "CG-001"
+        ],
+        [
+          1,
+          "CG-002"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            1,
+            "CG-001"
+          ],
+          [
+            1,
+            "CG-002"
+          ]
+        ],
+        "suppressed": 0,
+        "diagnostics": [
+          {
+            "line": 1,
+            "message": "invalid codeguard-ignore directive: unexpected token \"CG-001:\"; it suppresses nothing (put \"--\" before a free-text reason)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "reason-text-is-never-inspected",
+      "source": [
+        "x(); // codeguard-ignore CG-001 -- see TYPO-999 and CG-002."
+      ],
+      "findings": [
+        [
+          1,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "legacy-undelimited-reason-still-works",
+      "source": [
+        "x(); // codeguard-ignore CG-001 reviewed: input is a constant"
+      ],
+      "findings": [
+        [
+          1,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "bare-with-reason-suppresses-every-rule",
+      "source": [
+        "x(); y(); // codeguard-ignore -- vendored code"
+      ],
+      "findings": [
+        [
+          1,
+          "CG-001"
+        ],
+        [
+          1,
+          "004-phase2-taint"
+        ]
+      ],
+      "expect": {
+        "kept": [],
+        "suppressed": 2,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "known-custom-rule-id",
+      "source": [
+        "x(); // codeguard-ignore CR-301"
+      ],
+      "knownRuleIds": [
+        "CR-301"
+      ],
+      "findings": [
+        [
+          1,
+          "CR-301"
+        ]
+      ],
+      "expect": {
+        "kept": [],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "crlf-line-endings",
+      "lineEnding": "\r\n",
+      "source": [
+        "x(); // codeguard-ignore CG-001",
+        "// codeguard-ignore-next-line",
+        "z();"
+      ],
+      "findings": [
+        [
+          1,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-002"
+        ]
+      ],
+      "expect": {
+        "kept": [],
+        "suppressed": 2,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "documentation-mention-is-not-a-directive",
+      "source": [
+        "x(); // see codeguard-ignore-list.md"
+      ],
+      "findings": [
+        [
+          1,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            1,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 0,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "disabled-suppression-keeps-everything",
+      "inlineSuppression": false,
+      "source": [
+        "x(); // codeguard-ignore",
+        "y(); // codeguard-ignore CG-001, reviewed",
+        "z(); // codeguard-ignore TYPO-1"
+      ],
+      "findings": [
+        [
+          1,
+          "CG-001"
+        ],
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            1,
+            "CG-001"
+          ],
+          [
+            2,
+            "CG-001"
+          ],
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 0,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "control-characters-in-tokens-are-escaped",
+      "source": [
+        "x(); // codeguard-ignore CG-001\u001b[31m\\\"x"
+      ],
+      "findings": [
+        [
+          1,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            1,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 0,
+        "diagnostics": [
+          {
+            "line": 1,
+            "message": "invalid codeguard-ignore directive: unexpected token \"CG-001\\u001b[31m\\\\\\\"x\"; it suppresses nothing (put \"--\" before a free-text reason)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "form-feed-does-not-shift-line-numbers",
+      "source": [
+        "x = 1\fy = 2",
+        "eval(a)  # codeguard-ignore CG-001",
+        "eval(b)"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "vertical-tab-does-not-shift-line-numbers",
+      "source": [
+        "x = 1\u000by = 2",
+        "eval(a)  # codeguard-ignore CG-001",
+        "eval(b)"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "next-line-char-does-not-shift-line-numbers",
+      "source": [
+        "x = 1y = 2",
+        "eval(a)  # codeguard-ignore CG-001",
+        "eval(b)"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "line-separator-does-not-shift-line-numbers",
+      "source": [
+        "x = 1 y = 2",
+        "eval(a)  # codeguard-ignore CG-001",
+        "eval(b)"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "paragraph-separator-does-not-shift-line-numbers",
+      "source": [
+        "x = 1 y = 2",
+        "eval(a)  # codeguard-ignore CG-001",
+        "eval(b)"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "lone-carriage-return-does-not-shift-line-numbers",
+      "source": [
+        "x = 1\ry = 2",
+        "eval(a)  # codeguard-ignore CG-001",
+        "eval(b)"
+      ],
+      "findings": [
+        [
+          2,
+          "CG-001"
+        ],
+        [
+          3,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            3,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "form-feed-before-next-line-directive",
+      "source": [
+        "\f",
+        "# codeguard-ignore-next-line CG-001",
+        "eval(a)",
+        "eval(b)  # codeguard-ignore CG-"
+      ],
+      "findings": [
+        [
+          3,
+          "CG-001"
+        ],
+        [
+          4,
+          "CG-001"
+        ]
+      ],
+      "expect": {
+        "kept": [
+          [
+            4,
+            "CG-001"
+          ]
+        ],
+        "suppressed": 1,
+        "diagnostics": [
+          {
+            "line": 4,
+            "message": "invalid codeguard-ignore directive: unexpected token \"CG-\"; it suppresses nothing (put \"--\" before a free-text reason)"
+          }
+        ]
+      }
+    }
+  ]
+}

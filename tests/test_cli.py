@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_codeguard import cli
+from ai_code_audit import hybrid_cli as cli
 
 
 def test_git_url_clone_failure_falls_back(

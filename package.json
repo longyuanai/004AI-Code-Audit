@@ -21,13 +21,13 @@
     "dev": "tsup --watch",
     "test": "vitest",
     "test:run": "vitest run",
-    "lint": "eslint src/",
+    "lint": "eslint src tests scripts",
     "prepublishOnly": "npm run build && npm run test:run",
     "scan:self": "node dist/index.js scan ./src",
     "smoke:router": "node scripts/router-smoke.mjs",
     "precision": "vitest run tests/precision",
     "triage": "vitest run tests/triage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json"
   },
   "keywords": [
     "security",

@@ -4,8 +4,8 @@ from uuid import UUID
 
 import pytest
 
-from codeguard.taint import TaintRule
-from codeguard.v05 import (
+from ai_code_audit.taint import TaintRule
+from ai_code_audit.v05 import (
     Finding,
     FindingSeverity,
     FindingSource,

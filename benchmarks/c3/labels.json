@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "corpus_version": "c3-python-2026-09-24",
+  "labeling": "Hand-written from the code facts of each synthetic sample (2026-09-24). Inline 'c3-expect' markers fix the line; this file gives the rationale. Never regenerate from scanner output.",
+  "language": "python",
+  "rules": {
+    "004-phase2-taint": {
+      "backend": "builtin",
+      "definition": "src/ai_code_audit/scanner.py SOURCE_PATTERN/SINK_PATTERN",
+      "claimed_cwes": ["CWE-78", "CWE-89", "CWE-95"],
+      "claim_basis": "Message 'User-controlled input reaches <sink>'; sink pattern covers eval/exec (CWE-95), system/popen/Command (CWE-78) and query/execute/executeQuery (CWE-89)."
+    },
+    "004-taint-source-to-sink": {
+      "backend": "builtin",
+      "definition": "src/ai_code_audit/taint.py TaintAnalyzer, routed from src/ai_code_audit/scanner.py for python/go/java",
+      "claimed_cwes": ["CWE-78", "CWE-89", "CWE-95"],
+      "claim_basis": "Message '<variable> is read from <source> and reaches <sink>'; the analyser tracks a named variable from source to sink, covering the same sink families as the heuristic (added 2026-09-26 when the builtin scanner switched python to dataflow)."
+    },
+    "CG-OG-PY-001": {
+      "backend": "opengrep",
+      "definition": "rules/opengrep/taint.yaml",
+      "claimed_cwes": ["CWE-95"],
+      "claim_basis": "Rule metadata cwe CWE-95; sources input(...), os.getenv(...), sys.argv; sinks eval(...), exec(...) (sys.argv and exec added in C3, 2026-09-24)."
+    }
+  },
+  "cases": {
+    "PY-CI-01": {"category": "vulnerable", "rationale": "input() value passed unchanged to eval."},
+    "PY-CI-02": {"category": "vulnerable", "rationale": "Environment variable is caller-controlled and passed to eval."},
+    "PY-CI-03": {"category": "vulnerable", "rationale": "sys.argv element passed to eval."},
+    "PY-CI-04": {"category": "vulnerable", "rationale": "input() value passed to exec; same class as eval (CWE-95)."},
+    "PY-CI-05": {"category": "vulnerable", "rationale": "eval parameter only ever receives input() from main(); sink line precedes the source line."},
+    "PY-CMD-01": {"category": "vulnerable", "rationale": "input() concatenated into an os.system shell command."},
+    "PY-CMD-02": {"category": "vulnerable", "rationale": "sys.argv interpolated into an os.popen shell command."},
+    "PY-FP-01": {"category": "fp_prone", "rationale": "eval receives a string constant; input() result is discarded."},
+    "PY-FP-02": {"category": "fp_prone", "rationale": "ast.literal_eval only evaluates literals; not code execution."},
+    "PY-FP-03": {"category": "fp_prone", "rationale": "eval( appears only inside a comment."},
+    "PY-FP-04": {"category": "fp_prone", "rationale": "system( appears only inside a string literal passed to print."},
+    "PY-FP-05": {"category": "fp_prone", "rationale": "subprocess.call with a constant argument list and no shell."},
+    "PY-FP-06": {"category": "fp_prone", "rationale": "exec receives a string constant; sys.argv is only counted."},
+    "PY-FIX-01": {"category": "fixed", "fixes": "PY-CI-01", "rationale": "eval replaced by ast.literal_eval."},
+    "PY-FIX-02": {"category": "fixed", "fixes": "PY-CI-02", "rationale": "eval replaced by an allow-list lookup; unknown keys raise KeyError."},
+    "PY-FIX-03": {"category": "fixed", "fixes": "PY-CMD-01", "rationale": "Shell string replaced by an argument list without shell=True."}
+  }
+}
