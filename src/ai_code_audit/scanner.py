@@ -117,13 +117,17 @@ def scan_repository(
             language=adapter.name,
             changed_ranges=changed,
         )
-        findings.extend(dataflow)
-
-        # Where dataflow already proved a flow into a sink, the heuristic
-        # would report the same line again with weaker evidence.
+        if dataflow is not None:
+            findings.extend(dataflow)
+        # The dataflow engine is intra-procedural. Where it analysed the file,
+        # its verdict stands inside each scope -- an unproven same-scope hit is,
+        # on the C3 corpus, always a false positive such as a constant eval
+        # after an unrelated input() -- and the heuristic only adds what the
+        # engine cannot see by design: a module-level source read by a sink
+        # inside a function.
         proven_lines = {
             int(item["metadata"]["line"])  # type: ignore[index]
-            for item in dataflow
+            for item in dataflow or ()
         }
         findings.extend(
             finding
@@ -135,6 +139,7 @@ def scan_repository(
                 relative_path=relative_path,
                 language=adapter.name,
                 changed_ranges=changed,
+                cross_scope_only=dataflow is not None,
             )
             if int(finding["metadata"]["line"]) not in proven_lines  # type: ignore[index]
         )
@@ -194,16 +199,18 @@ def _dataflow_findings(
     relative_path: str,
     language: str,
     changed_ranges: Sequence[tuple[int, int]] | None,
-) -> list[dict[str, object]]:
+) -> list[dict[str, object]] | None:
     """Proven source-to-sink flows from the AST dataflow engine.
 
     Unlike the heuristic below, these name the variable that carries the
     tainted value and list every propagation step, so they are reported at
-    full severity.
+    full severity. Returns None when the engine does not cover the language
+    or could not analyse the file; the caller then falls back to the
+    heuristic.
     """
 
     if language not in DATAFLOW_LANGUAGES:
-        return []
+        return None
 
     try:
         paths = _TAINT_ANALYZER.analyze(
@@ -214,7 +221,7 @@ def _dataflow_findings(
     except (ValueError, KeyError):
         # A grammar or parse problem must not abort the whole scan; the
         # heuristic still runs for this file.
-        return []
+        return None
 
     findings: list[dict[str, object]] = []
     for path in paths:
@@ -251,6 +258,10 @@ def _dataflow_findings(
                     "relative_path": relative_path,
                     "rule_id": "004-taint-source-to-sink",
                     "analysis": "dataflow",
+                    # The sink expression, not the rendered step: that one
+                    # carries line:column, and the fingerprint must survive
+                    # code moving up or down.
+                    "snippet": path.sink.detail,
                     "variable": path.variable,
                     "scope": path.sink.function,
                 },
@@ -310,6 +321,7 @@ def _security_findings(
     relative_path: str,
     language: str,
     changed_ranges: Sequence[tuple[int, int]] | None,
+    cross_scope_only: bool = False,
 ) -> list[dict[str, object]]:
     raw_lines = split_source_lines(source.decode("utf-8", errors="replace"))
     code_lines = split_source_lines(
@@ -339,14 +351,14 @@ def _security_findings(
         # one. Require the source to be in the same function as the sink, or
         # at module level where it is genuinely in scope for it.
         sink_scope = _enclosing_span(line_number, function_spans)
+        if cross_scope_only and sink_scope is None:
+            continue
+        allowed_scopes = (None,) if cross_scope_only else (sink_scope, None)
         reaching = [
             candidate
             for candidate in source_lines
             if candidate <= line_number
-            and (
-                _enclosing_span(candidate, function_spans)
-                in (sink_scope, None)
-            )
+            and _enclosing_span(candidate, function_spans) in allowed_scopes
         ]
         if not reaching:
             continue

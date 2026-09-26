@@ -56,6 +56,7 @@ LABELS = C3 / "labels.json"
 DEFAULT_OPENGREP = ROOT / "tools" / "opengrep" / "v1.26.0" / "opengrep.exe"
 OPENGREP_RULES = ROOT / "rules" / "opengrep" / "taint.yaml"
 BUILTIN_RULE_SOURCE = ROOT / "src" / "ai_code_audit" / "scanner.py"
+BUILTIN_TAINT_SOURCE = ROOT / "src" / "ai_code_audit" / "taint.py"
 MARKER = re.compile(
     r"c3-expect\s+(?P<kind>vuln|safe)"
     r"(?:\s+(?P<cwe>CWE-\d+))?\s+(?P<case>PY-[A-Z]+-\d+)"
@@ -289,6 +290,7 @@ def evaluate(
         },
         "rule_sources": {
             "004-phase2-taint": _text_sha256(BUILTIN_RULE_SOURCE),
+            "004-taint-source-to-sink": _text_sha256(BUILTIN_TAINT_SOURCE),
             "CG-OG-PY-001": _text_sha256(OPENGREP_RULES),
         },
         "backends_run": list(backends_to_run),

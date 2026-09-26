@@ -281,3 +281,21 @@ def test_comment_masking_applies_across_languages(
     body: str,
 ) -> None:
     assert _scan(tmp_path, filename, body) == []
+
+
+def test_dataflow_fingerprint_survives_a_line_shift(
+    tree_sitter_binding,
+    tmp_path: Path,
+) -> None:
+    """The fingerprint uses the sink expression, not the rendered step with line:column."""
+    from ai_code_audit.postprocess import fingerprint_finding
+
+    body = "def handler(conn):\n    name = input('n')\n    conn.execute(name)\n"
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    first = _scan(tmp_path / "a", "app.py", body)
+    shifted = _scan(tmp_path / "b", "app.py", "# moved\n\n" + body)
+
+    assert [f["metadata"]["analysis"] for f in first + shifted] == ["dataflow", "dataflow"]
+    assert first[0]["metadata"]["line"] + 2 == shifted[0]["metadata"]["line"]
+    assert fingerprint_finding(first[0]) == fingerprint_finding(shifted[0])

@@ -10,6 +10,12 @@
       "claimed_cwes": ["CWE-78", "CWE-89", "CWE-95"],
       "claim_basis": "Message 'User-controlled input reaches <sink>'; sink pattern covers eval/exec (CWE-95), system/popen/Command (CWE-78) and query/execute/executeQuery (CWE-89)."
     },
+    "004-taint-source-to-sink": {
+      "backend": "builtin",
+      "definition": "src/ai_code_audit/taint.py TaintAnalyzer, routed from src/ai_code_audit/scanner.py for python/go/java",
+      "claimed_cwes": ["CWE-78", "CWE-89", "CWE-95"],
+      "claim_basis": "Message '<variable> is read from <source> and reaches <sink>'; the analyser tracks a named variable from source to sink, covering the same sink families as the heuristic (added 2026-09-26 when the builtin scanner switched python to dataflow)."
+    },
     "CG-OG-PY-001": {
       "backend": "opengrep",
       "definition": "rules/opengrep/taint.yaml",

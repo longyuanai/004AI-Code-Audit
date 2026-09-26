@@ -60,6 +60,8 @@ Opengrep 二进制保存在被 Git 忽略的 `tools/opengrep/v1.26.0/`，不进�
 
 时间为一次本地 Windows 运行结果，只用于数量级比较，不作为稳定性能承诺。
 
+**2026-09-26 复测**：builtin 对 Python/Go/Java 改走过程内数据流引擎（`src/ai_code_audit/taint.py`）后，语料与期望未改，builtin 为 TP 5 / FP 2 / FN 5 / TN 3（Precision 71.4%，Recall 50.0%）。三个“常量 sink 被关联到无关输入”的误报消失；漏报不变（跨函数流、builtin 不认识的输入源）。上表保留为 Phase 0 当时的原始结果。
+
 可复现命令：
 
 ```powershell

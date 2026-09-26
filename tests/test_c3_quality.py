@@ -83,20 +83,22 @@ def test_builtin_ratchet_and_known_errors_are_stable() -> None:
     second = evaluate(backends_to_run=("builtin",))
 
     assert first["result"] == second["result"]
-    rule = _rule(first, "builtin", "004-phase2-taint")
-    # Re-measured after merging main 5d4d60c (comments/strings blanked, sink
-    # paired only with a source in the same function); corpus and labels are
-    # unchanged. Before that fix: (6, 4, 1, 5) with PY-FP-03/04 as FPs and
-    # PY-CI-02 an accidental TP via an input() in another function.
-    assert (rule["tp"], rule["fp"], rule["fn"], rule["tn"]) == (5, 2, 2, 7)
-    assert {item["case"] for item in rule["false_positives"]} == {
-        "PY-FP-01",  # constant eval after an input() in the same function
-        "PY-FP-06",  # constant exec after sys.argv is read
+    # Re-measured 2026-09-26 after python moved to the dataflow engine; the
+    # corpus and the case labels are unchanged. History of the builtin total:
+    # (6, 4, 1, 5) before main 5d4d60c; (5, 2, 2, 7) heuristic-only after it.
+    dataflow = _rule(first, "builtin", "004-taint-source-to-sink")
+    assert (dataflow["tp"], dataflow["fp"], dataflow["fn"], dataflow["tn"]) == (5, 1, 2, 8)
+    assert {item["case"] for item in dataflow["false_positives"]} == {
+        "PY-FIX-03",  # tainted value still reaches subprocess, now as an argv list
     }
-    assert [item["case"] for item in rule["false_negatives"]] == [
+    assert [item["case"] for item in dataflow["false_negatives"]] == [
         "PY-CI-02",  # os.getenv is not a builtin source
-        "PY-CI-05",  # sink function has no source in its own scope
+        "PY-CI-05",  # the source is in main(), the sink in its callee
     ]
+    # On dataflow languages the heuristic only adds module-level-source flows
+    # into functions; PY-FP-01/06 (constant eval/exec) no longer fire.
+    heuristic = _rule(first, "builtin", "004-phase2-taint")
+    assert (heuristic["tp"], heuristic["fp"]) == (0, 0)
 
 
 def test_unavailable_opengrep_is_an_error_not_zero_findings(

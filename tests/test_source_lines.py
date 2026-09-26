@@ -66,7 +66,28 @@ def test_scanner_reports_tree_sitter_lines_with_matching_evidence(
 
     findings = scan_repository(tmp_path, ["python"])["findings"]
 
+    # Python takes the dataflow path; its evidence is the rendered chain.
     assert [f["metadata"]["line"] for f in findings] == [_call_row(source)] == [3]
+    assert findings[0]["metadata"]["analysis"] == "dataflow"
+    assert findings[0]["evidence"][-1] == "sink:eval at <module>:3:1 (eval(value))"
+    assert findings[0]["metadata"]["snippet"] == "eval(value)"
+
+
+@pytest.mark.parametrize("name", list(SEPARATORS))
+@pytest.mark.parametrize("placement", ["code", "comment"])
+def test_heuristic_scanner_reports_tree_sitter_lines(
+    tree_sitter_binding, tmp_path: Path, name: str, placement: str
+) -> None:
+    """TypeScript still takes the co-occurrence heuristic, which splits lines itself."""
+    separator = SEPARATORS[name]
+    first = f"const x = 1{separator}const y = 2" if placement == "code" else f"// a{separator}b"
+    source = f"{first}\nconst value = req.query.v\neval(value)\n"
+    (tmp_path / "app.ts").write_bytes(source.encode("utf-8"))
+
+    findings = scan_repository(tmp_path, ["typescript"])["findings"]
+
+    assert [f["metadata"]["line"] for f in findings] == [3]
+    assert findings[0]["metadata"]["analysis"] == "heuristic-cooccurrence"
     assert findings[0]["evidence"][-1] == "sink line 3: eval(value)"
 
 

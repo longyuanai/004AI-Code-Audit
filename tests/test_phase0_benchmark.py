@@ -79,8 +79,12 @@ def test_builtin_phase0_baseline_exposes_dataflow_limit(
 
     assert version == "builtin-tree-sitter-heuristic"
     assert elapsed >= 0
+    # Re-measured 2026-09-26: Python/Go/Java now go through the dataflow
+    # engine, which drops three constant-sink false positives (was 5/5/5,
+    # precision 0.5). Recall is unchanged: the misses are cross-function
+    # flows and sources neither engine models.
     assert metrics.true_positives == 5
-    assert metrics.false_positives == 5
+    assert metrics.false_positives == 2
     assert metrics.false_negatives == 5
-    assert metrics.precision == 0.5
+    assert metrics.precision == 5 / 7
     assert metrics.recall == 0.5

@@ -7,7 +7,7 @@
 | 项目 | 内容 |
 |---|---|
 | 语言 | Python（仅此一种；C++/Go/Java/TS 不在本轮范围） |
-| 后端与规则 | builtin 默认后端 `004-phase2-taint`（`src/ai_code_audit/scanner.py` 文本 source/sink 启发式）；opengrep 后端 `CG-OG-PY-001`（`rules/opengrep/taint.yaml`，CWE-95） |
+| 后端与规则 | builtin 默认后端：Python/Go/Java 走 `004-taint-source-to-sink`（`src/ai_code_audit/taint.py` 过程内数据流，2026-09-26 起），另保留 `004-phase2-taint`（`scanner.py` 文本 source/sink 启发式）——在数据流语言上只补报“模块级 source → 函数内 sink”这一数据流看不到的情形，C++/TS 仍全量使用；opengrep 后端 `CG-OG-PY-001`（`rules/opengrep/taint.yaml`，CWE-95） |
 | 引擎版本 | Opengrep 1.26.0，二进制原始字节 SHA-256 在启动前与 `benchmarks/phase0/OPENGREP.lock` 校验，不符即不执行（写入 `run.opengrep_pin`）；二进制不入库 |
 | 语料 | `benchmarks/c3/corpus/python`，版本 `c3-python-2026-09-24`，全部为合成样例：7 个漏洞行、9 个安全行（容易误报 6、修复后 3） |
 | 标注 | 行内 `c3-expect` 标记 + `benchmarks/c3/labels.json` 逐例理由，依据代码事实人工编写，未使用扫描输出生成 |
@@ -27,6 +27,18 @@
 
 **合并 main 后（2026-09-24，含 main 5d4d60c 扫描器修复）**：语料与标注未改，builtin 重测为 TP 5 / FP 2 / FN 2 / TN 7（P 71.4%、R 71.4%），opengrep 不变。变化原因：main 在匹配前清空注释与字符串，PY-FP-03（注释）、PY-FP-04（字符串）不再误报；sink 只与同一函数内的 source 配对，PY-CI-02（`os.getenv`，builtin 本就不认作 source）此前是借同文件另一函数的 `input()` 偶然命中，现为 FN。builtin 命中现为 medium/0.5，演示门禁因此由 high 改为 medium（opengrep 命中为 high，仍会触发）。三次重复一致，两种后端演示全部检查通过。
 
+**切换数据流后（2026-09-26）**：语料与逐例标注未改，仅在 labels.json 的 `rules` 中登记新规则 `004-taint-source-to-sink` 的定义。builtin 合计由 TP 5 / FP 2 / FN 2 / TN 7（P 71.4%、R 71.4%）变为：
+
+| 后端 | 规则 | TP | FP | FN | TN | Precision | Recall |
+|---|---|---:|---:|---:|---:|---:|---:|
+| builtin | 004-taint-source-to-sink | 5 | 1 | 2 | 8 | 83.3% | 71.4% |
+| builtin | 004-phase2-taint | 0 | 0 | — | — | N/A | — |
+
+- PY-FP-01、PY-FP-06（常量 eval/exec）不再误报：数据流确认常量不携带污点，同作用域内启发式不再补报。
+- 新增 PY-FIX-03 误报：改成参数列表后，受污染的值仍作为 argv 元素传入 subprocess；数据流不区分 shell 字符串与参数列表。
+- PY-CI-02（`os.getenv` 不是 builtin source）、PY-CI-05（source 在调用方 `main()`，属跨函数流）仍为 FN。
+- 若让启发式在数据流语言上照旧全量运行，合计为 TP 5 / FP 3（多出 PY-FP-01/06），比切换前更差，因此只保留跨作用域补报。
+
 \* 修复前语料尚无 PY-FP-06，安全行为 8。opengrep 修复后的 100% 是**样本内**结果：该语料同时用于发现并验证修复，不能外推。
 
 - builtin 声明 CWE-89 但语料无 SQL 注入样例（`claimed_cwes_without_cases`），该类未测。
@@ -37,7 +49,7 @@
 
 | 用例 | 结果 | 原因 | 处理 |
 |---|---|---|---|
-| PY-FP-01 常量 eval、PY-FP-06 常量 exec | builtin FP | 文件级启发式：首个 source 行之后的任何 sink 都算一条流，无数据流 | 不修（引擎级限制，Phase 0 已记录；opengrep 后端正确） |
+| PY-FP-01 常量 eval、PY-FP-06 常量 exec | builtin FP（2026-09-26 前） | 文件级启发式：首个 source 行之后的任何 sink 都算一条流，无数据流 | 已修：Python 改走数据流，见上文“切换数据流后” |
 | PY-FP-03 注释中的 `eval(`、PY-FP-04 字符串中的 `system(` | builtin FP | SINK_PATTERN 对原始文本匹配，不区分注释/字符串 | 不修（需语法感知，属引擎改动） |
 | PY-CI-05 sink 定义在 source 之上 | builtin FN | 只接受 source 行之后的 sink 行 | 不修；opengrep 过程内污点可覆盖 |
 | PY-CI-03 `sys.argv` → eval、PY-CI-04 input → `exec` | opengrep FN（修复前） | 规则 sources 缺 `sys.argv`，sinks 缺 `exec(...)` | **已修**（见 §3） |
