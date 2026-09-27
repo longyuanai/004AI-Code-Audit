@@ -144,8 +144,9 @@ jobs:
   # The same Python suite on Windows, with the Opengrep binary that
   # OPENGREP.lock pins. The lock pins the Windows asset, so this is the only
   # job where the Opengrep-backed C3 tests can run; everywhere else they skip.
-  # The checkout is the runner default (core.autocrlf=true, CRLF files), as
-  # in a local Windows clone. Any skipped test fails the job.
+  # The checkout keeps the runner's git defaults, as a local Windows clone
+  # would; the next step logs the working-tree line endings it produced.
+  # Any skipped test fails the job.
   python-tests-windows:
     name: pytest (Windows, Python 3.12, pinned Opengrep)
     runs-on: windows-latest
@@ -163,6 +164,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: 004AI-Code-Audit
+
+      - name: Report the checkout's line endings
+        working-directory: 004AI-Code-Audit
+        run: |
+          echo "core.autocrlf=$(git config --get core.autocrlf || echo unset)"
+          git ls-files --eol | awk '{print $2}' | sort | uniq -c
 
       - name: Checkout shared-llm-core
         uses: actions/checkout@v4

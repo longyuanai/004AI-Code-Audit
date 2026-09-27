@@ -138,7 +138,7 @@ $env:PYTHONPATH = "src;..\000shared-llm-core\src;.python-deps;."
 | 000shared-llm-core | 本机 aecaa9e（工作区另有既有未提交修改） | CI 作业检出 `master`，未锁定 SHA |
 | Python 依赖 | 本机 `.python-deps`（tree-sitter 绑定，未入库）与用户站点包 | CI 的安装清单见 `.github/workflows/ci.yml`，未在干净环境验证 |
 | git | 本机 | 演示的 diff 步骤需要 |
-| Opengrep 1.26.0 | 仅 opengrep 后端需要 | 须与 OPENGREP.lock 原始字节哈希一致；缺失或不符时评测与演示退出 4 且不启动；依赖真实二进制的两个测试在缺失时显式 skip，门禁负向测试不需要二进制 |
+| Opengrep 1.26.0 | 仅 opengrep 后端需要 | 须与 OPENGREP.lock 原始字节哈希一致；缺失或不符时评测与演示退出 4 且不启动；依赖真实二进制的两个测试在缺失时显式 skip，门禁负向测试不需要二进制。CI 中只有 `ci.yml` 的 Windows job（`python-tests-windows`）下载该资产、按锁文件校验后执行这两个测试并要求 0 skip；Linux job 中两者仍 skip |
 
 - 质量脚本与演示**不依赖**根仓 `suite.py`；它们只需上述两个产品仓与 shared-llm-core。
 - 依赖根仓未提交文件的能力：`suite.py code audit -- enrich` 能导入漏洞模块依赖根 `suite.py` 的 `EXTRA_SOURCES`；根入口测试 `tests/test_suite_code_enrich.py`、`tests/test_suite_launcher.py` 与 `scripts/repair_links.py` 同样未提交。因此“只检出两个产品提交”不能复现经根入口运行的 enrich；当前整个工作区可运行不等于提交可复现。
