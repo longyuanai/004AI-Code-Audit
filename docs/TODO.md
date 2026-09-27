@@ -70,6 +70,7 @@
   - 门禁失败时仍上传 SARIF artifact。
   - 非 fork、权限允许时上传 GitHub Code Scanning。
 - DoD：Draft PR 出现 checks，连续 3 次运行稳定通过。
+- 进展：`ci.yml` 已有 Ubuntu Python 3.11/3.12 与 Windows Python 3.12 作业；Windows 作业使用固定版 Opengrep 执行完整 Python 测试并要求 0 skip。PR diff/baseline 门禁与 SARIF 上传未做。
 
 ### TYPE-001 · 修复 TypeScript typecheck 基线
 
@@ -83,6 +84,7 @@
 - 工作：固定版本、平台资产 URL、SHA-256、许可证和下载缓存策略。
 - 安全：下载后先校验再执行；payload 不得覆盖 executable path。
 - DoD：Windows/Linux 安装 smoke、篡改摘要失败测试、离线 fallback 测试通过。
+- 进展：CI 的 Windows 作业已按 OPENGREP.lock 下载 `opengrep_windows_x86.exe` 并在执行前校验 SHA-256。锁文件只固定 Windows 资产；Linux 资产、许可证、缓存与离线 fallback 未做。
 
 ### SEC-001 · 产品安全回归
 
