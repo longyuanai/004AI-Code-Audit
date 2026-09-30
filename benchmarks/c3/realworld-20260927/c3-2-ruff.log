@@ -1,0 +1,56 @@
+B023 Function definition does not bind loop variable `native_run`
+   --> benchmarks\c3\realworld.py:150:41
+    |
+148 |                     for index in (1, 2):
+149 |                         def capture(*cmd: Any, **kwargs: Any) -> Any:
+150 |                             completed = native_run(*cmd, **kwargs)
+    |                                         ^^^^^^^^^^
+151 |                             write_json(out / f"{backend}-{index}-native.json", {
+152 |                                 "command": completed.args, "exit_code": completed.returncode,
+    |
+
+B023 Function definition does not bind loop variable `backend`
+   --> benchmarks\c3\realworld.py:151:49
+    |
+149 |                         def capture(*cmd: Any, **kwargs: Any) -> Any:
+150 |                             completed = native_run(*cmd, **kwargs)
+151 |                             write_json(out / f"{backend}-{index}-native.json", {
+    |                                                 ^^^^^^^
+152 |                                 "command": completed.args, "exit_code": completed.returncode,
+153 |                                 "stdout": completed.stdout, "stderr": completed.stderr,
+    |
+
+B023 Function definition does not bind loop variable `index`
+   --> benchmarks\c3\realworld.py:151:59
+    |
+149 |                         def capture(*cmd: Any, **kwargs: Any) -> Any:
+150 |                             completed = native_run(*cmd, **kwargs)
+151 |                             write_json(out / f"{backend}-{index}-native.json", {
+    |                                                           ^^^^^
+152 |                                 "command": completed.args, "exit_code": completed.returncode,
+153 |                                 "stdout": completed.stdout, "stderr": completed.stderr,
+    |
+
+BLE001 Do not catch blind exception: `Exception`
+   --> benchmarks\c3\realworld.py:169:24
+    |
+167 |                         raise RuntimeError("Discovered file count does not match sample")
+168 |                     entry["status"] = "ok" if entry["repeat_identical"] else "repeat_mismatch"
+169 |                 except Exception as error:
+    |                        ^^^^^^^^^
+170 |                     entry["error"] = f"{type(error).__name__}: {error}"
+171 |                     entry["findings"] = None
+    |
+
+BLE001 Do not catch blind exception: `Exception`
+   --> benchmarks\c3\realworld.py:177:12
+    |
+175 |             and record["sample_unchanged"] and not record["network"]["python_attempts"]
+176 |         ) else 4
+177 |     except Exception as error:
+    |            ^^^^^^^^^
+178 |         record["error"] = f"{type(error).__name__}: {error}"
+179 |     finally:
+    |
+
+Found 5 errors.

@@ -1,0 +1,64 @@
+{
+  "sample_kind": "real_owned_project",
+  "sample_commit": "0fb5b18d32006c8db08997bbeb383ffcf2bc6ede",
+  "review_method": "逐条核对两个后端完整 envelope，并对预先登记的五个文件中的指定函数进行源码人工审阅；未请独立人类评审者签署。",
+  "findings_review": [],
+  "finding_counts": {
+    "builtin": {"reported": 0, "reviewed": 0, "tp": 0, "fp": 0, "unconfirmed": 0},
+    "opengrep": {"reported": 0, "reviewed": 0, "tp": 0, "fp": 0, "unconfirmed": 0}
+  },
+  "precision": null,
+  "recall": null,
+  "reason": "无扫描发现，逐条复核清单为空；不存在完整真值集，不能从空结果推导 TN、FN 或召回率。人工线索另列，不混入扫描发现。",
+  "manual_review": [
+    {
+      "id": "RW-01",
+      "path": "hybrid_cli.py",
+      "lines": "302-407",
+      "functions": ["_local_repo_path", "_materialize_repo", "_git_url_scheme", "_validate_git_url", "_clone_repository"],
+      "evidence": "372 行起校验 scheme；384 行起以参数数组、shell=False 和 -- 调用 git clone。协议白名单没有主机/IP限制，纯校验接受 https://127.0.0.1/owned-test.git。",
+      "verdict": "无法确认",
+      "reason": "CWE-918 风险线索：若远程不可信调用者可提交 git_url 且扫描进程能访问内网，可能产生 SSRF。当前仅为授权本地 CLI，未验证远程权限或任何实际联网利用。README 已说明此限制。",
+      "backend_difference": "builtin 的 input/argv 与文本 sink 模式、Opengrep 的 Python CWE-95 规则均不覆盖 URL 主机策略；这是覆盖范围外线索，不计 FN。",
+      "next_task": "单独明确远程扫描的信任边界与主机访问策略，再设计拒绝内网/重定向测试。"
+    },
+    {
+      "id": "RW-02",
+      "path": "cli.py",
+      "lines": "47-160,612-659",
+      "functions": ["scan_payload", "_read_envelope", "_write_output"],
+      "evidence": "fast 不进入 triage；JSON 输入有 64 MiB 限额与 UTF-8 校验；_write_output 使用固定的 .<name>.<pid>.tmp，然后 replace/unlink。离线临时目录探针确认同名已有临时文件会被覆盖并移走。",
+      "verdict": "无法确认",
+      "reason": "临时文件碰撞行为可复现；安全影响需要攻击者可写目标目录或同进程并发等前提，未证明。未创建符号链接、未操作用户文件，不能升级为已确认任意文件写漏洞。",
+      "backend_difference": "两后端都无临时文件安全规则，不计 FN。",
+      "next_task": "另列报告临时文件唯一性修复任务：使用独占临时文件并验收碰撞、并发、失败保留旧报告。"
+    },
+    {
+      "id": "RW-03",
+      "path": "gitutils.py",
+      "lines": "26-60,104-124",
+      "functions": ["collect_diff", "_validate_ref", "_run_git"],
+      "evidence": "ref 必须匹配 SAFE_REF 且首字符为字母数字；命令使用参数数组、shell=False 和结尾 --。",
+      "verdict": "抽查未确认问题",
+      "reason": "未发现所审参数路径的直接 shell 注入；未全面审计 Git 配置、特殊文件名或所有 diff 解析边界。"
+    },
+    {
+      "id": "RW-04",
+      "path": "backends/opengrep.py",
+      "lines": "47-128,228-241,300-305",
+      "functions": ["OpengrepBackend.scan", "_source_path", "_document_warnings"],
+      "evidence": "参数数组/shell=False、超时和非零退出有异常；返回路径 resolve 后限制在 repo_path；原生 errors 转为 warnings。此次原生 errors=[] 且 paths.scanned 为全部36文件。",
+      "verdict": "抽查未确认问题",
+      "reason": "warnings 不等于无漏洞；新评测脚本将有 warnings 的运行记为失败。未验证所有原生错误结构与操作系统网络隔离。"
+    },
+    {
+      "id": "RW-05",
+      "path": "output/markdown.py",
+      "lines": "220-241",
+      "functions": ["_text", "_code", "_fence"],
+      "evidence": "HTML 转义、Markdown 特殊符号转义、表格竖线处理；代码围栏长度超过输入中的连续反引号。",
+      "verdict": "抽查未确认问题",
+      "reason": "所审字符串出口未发现直接 HTML/围栏逃逸线索；未做全报告渲染器或浏览器安全验收。"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "kind": "synthetic_offline_manual_probe_not_scan_result",
+  "accepted_urls_without_network": [
+    "https://127.0.0.1/owned-test.git",
+    "https://192.0.2.1/owned-test.git"
+  ],
+  "predictable_temporary_file_collision_removed": true,
+  "security_verdict": "unconfirmed: deployment/attacker permissions not established",
+  "network_requests": "none: only URL validator and owned temporary files used"
+}

@@ -1,0 +1,24 @@
+{
+  "findings": [],
+  "summary": {
+    "repo_path": "<SUITE_ROOT>\\002AI-Code-Audit\\artifacts\\c3-2-20260927-verified\\sample",
+    "repository_source": "local",
+    "files_scanned": 36,
+    "languages": [
+      "python"
+    ],
+    "backend": "opengrep",
+    "duplicates_removed": 0,
+    "suppressed": 0,
+    "baselined": 0,
+    "sensitive_findings": 0,
+    "risk_levels": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "mode": "fast"
+  },
+  "warnings": []
+}
