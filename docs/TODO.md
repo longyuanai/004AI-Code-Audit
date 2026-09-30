@@ -79,6 +79,7 @@
 - 发布前待办（均未验证）：⓪ git/Opengrep 原生子进程的网络隔离（需操作系统级出站阻断或沙箱证据）；① CI 覆盖缺口：未检出 000shared-integration（2 项跳过），未获取并校验固定版 Opengrep（2 项跳过），shared-llm-core 检出 master 未锁 SHA；② Linux 仅经 CI 验证（本机只在 Windows 实跑）；③ 干净环境 pip/Poetry 安装（当前只验证源码运行）；④ 真实 NVD/KEV/EPSS 数据写出的缓存；⑤ 授权真实项目样本抽查。已完成：远程 CI（Linux，Python 3.11/3.12，Node 18/20/22），根仓提交（2026-09-24，本地，根仓无远端）。
 - C3-2 本机评测（2026-09-27）：真实自有子模块 `src/ai_code_audit`，固定 Code `0fb5b18d32006c8db08997bbeb383ffcf2bc6ede`，36 文件/6645 行；builtin 与已校验哈希及运行版本的 Opengrep 1.26.0 各跑两次，均成功、结果一致、0 发现。发现复核清单为空；预先限定五个文件的函数抽查记录两条无法确认的覆盖外风险线索（URL 主机限制、临时文件碰撞），不计算真实项目召回率，不改引擎。此前“⑤ 授权真实项目样本抽查”由本次证据补齐本机样本部分，独立人类签署仍未完成。详见 [C3-2 报告](c3-2-realworld-20260927.md) 与 `benchmarks/c3/realworld-20260927/review.json`。
 - C3-2 本轮验证：相关 pytest 19 passed / 1 deselected，exit 0；双后端评测 exit 0，离线机制探针 exit 0，最终 Ruff exit 0，git diff --check exit 0；初次 mypy exit 1（当前解释器缺模块）；后用已有 Firmware Python 3.12.14 / mypy 1.20.2 对两个新脚本严格检查，默认目标与显式 Python 3.14 目标均 exit 0，见 C3-2 报告补验记录。原生网络隔离、独立人类复核、干净环境安装未验证；不是发布验收。本轮只新增评测材料与文档，未提交或推送。
+- 整理提交（2026-10-01）：C3-2 材料按功能拆分提交（评测脚本+测试 / 证据+文档），公开前把证据与文档中的本机绝对路径替换为 `<SUITE_ROOT>`、`<USER_HOME>`、`%LOCALAPPDATA%` 占位符；网关 e2e 测试改用临时空闲端口（原固定 18080 被本机其他进程占用导致 2 个 setup error）。本机实测：Python unit 336 passed / 18 deselected，integration 354 passed；TS 593 passed / 2 skipped，build、lint、typecheck 通过。README 测试数与发布状态同步更新。
 - 下一项最小任务：由独立人类签署复核清单（C3-2 脚本严格类型检查已补验通过）。另列后续任务 RW-02（报告临时文件唯一性、碰撞/并发回归）；RW-01 先确认远程扫描的网络信任边界。保持引擎修复与本轮评测分开。
 
 ## 通用停止条件

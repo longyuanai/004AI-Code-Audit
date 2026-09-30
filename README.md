@@ -20,7 +20,9 @@ $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python314\python.exe"  # 按本�
 
 退出码：0 成功、1 门禁触发、2 输入/输出错误、3 `--require-intel` 且情报不完整。阶段状态与字段见 [tech-spec §6](docs/tech-spec.md)。当前 Python 静态规则不产生 CVE，真实扫描的增强阶段通常为 skipped。
 
-Python 测试：`& $pythonExe .\scripts\run_python_tests.py --scope unit`（仅本产品）或 `--scope integration`（必须带唯一漏洞模块，缺失即失败）。
+Python 测试：`& $pythonExe .\scripts\run_python_tests.py --scope unit`（仅本产品）或 `--scope integration`（必须带唯一漏洞模块，缺失即失败）。2026-10-01 本机（Windows，Python 3.14.6）实测：unit 336 passed、18 deselected；integration 354 passed。
+
+质量评测：C3 合成语料基线与可复现演示见 [docs/c3-quality-and-demo.md](docs/c3-quality-and-demo.md)；C3-2 对自有真实子模块 `src/ai_code_audit` 的双后端本机评测（36 文件，两后端均 0 发现，无完整真值集故不计 precision/recall，独立人工签署未完成）见 [docs/c3-2-realworld-20260927.md](docs/c3-2-realworld-20260927.md)。
 
 
 # AI-CodeGuard
@@ -45,11 +47,11 @@ What is implemented today:
 - Config loading via `.codeguard.yml` / environment variables
 - Disk cache for Stage 2 LLM results (`cache.enabled`), wired into the scan pipeline
 - GitHub composite Action (`action.yml`), CI / SARIF-upload workflows, and a BYO-key PR-review workflow example (`docs/examples/pr-review.yml`; design in `docs/design/GITHUB_APP.md`)
-- Automated validation with **572 passing tests across 18 test files** (`npm run test:run`), plus two opt-in real-provider tests (an E2E acceptance test and the triage measurement, both skipped without `CODEGUARD_E2E=1` + API key) and a CI smoke job exercising the composite Action against the fixtures
+- Automated validation with **593 passing tests across 21 test files** (`npm run test:run`), plus two opt-in real-provider tests (an E2E acceptance test and the triage measurement, both skipped without `CODEGUARD_E2E=1` + API key) and a CI smoke job exercising the composite Action against the fixtures
 
 What is **not** complete yet:
-- npm registry publish (GitHub tags exist via the release workflow, but the package is not on npm yet)
-- `v0.4.0` tag — code and CHANGELOG are release-ready; trigger the manual `release` workflow with tag `v0.4.0` after merging to `main`
+- npm registry publish (the package is not on npm)
+- release tags — this repository has no Git tags yet; `package.json` is at `0.5.0` while the latest released CHANGELOG section is `0.4.0` (newer changes sit under `[Unreleased]`); the manual `release` workflow has not been run here
 
 ### Completion Snapshot
 
@@ -534,11 +536,12 @@ npm run test:run
 npm run lint
 ```
 
-Result (2026-07-11):
-- build passed, lint clean
-- `18` test files passed
-- `572` tests passed (plus `2` opt-in real-provider tests skipped without `CODEGUARD_E2E=1` + an API key)
-- self-scan of `./src` and the safe fixtures reports 0 findings; the vulnerable fixtures report 97
+Result (2026-10-01, local Windows, Node 24.18.0):
+- build passed, lint clean, `npm run typecheck` clean
+- `21` test files passed (`1` opt-in file skipped)
+- `593` tests passed (plus `2` opt-in real-provider tests skipped without `CODEGUARD_E2E=1` + an API key)
+- Stage 1 (`--dry-run`) self-scan of `./src` and `tests/fixtures/safe` reports 0 findings; `tests/fixtures/vulnerable` reports 98
+- Python side: see the `run_python_tests.py` results at the top of this README
 
 The scanner's own quality is measured, not just asserted: `npm run precision` reports Stage 1 precision/recall against a labeled corpus (baseline 95.8% / 92.0%, enforced by a ratchet test), and `npm run triage` (opt-in) measures Stage 2 confirm/dismiss accuracy. Stage 1 has also been validated by hand against three real open-source repositories — fixing the false-positive classes that run exposed cut noise on the clean repos by 84% while keeping every planted Juice Shop vulnerability (`docs/dev/REALWORLD.md`).
 
