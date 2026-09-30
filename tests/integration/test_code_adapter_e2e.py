@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import socket
 import sys
 import threading
 import time
@@ -45,14 +46,23 @@ pytest.importorskip(
 from shared_integration.gateway import build_gateway  # noqa: E402
 
 
+def _free_local_port() -> int:
+    # A fixed port (formerly 18080) collides with whatever else the host runs;
+    # ask the OS for an unused loopback port instead.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
 @pytest.fixture(scope="module")
-def gateway_18080() -> Iterator[str]:
+def gateway_url() -> Iterator[str]:
     app = build_gateway(SUITE_ROOT).app
+    port = _free_local_port()
     server = uvicorn.Server(
         uvicorn.Config(
             app,
             host="127.0.0.1",
-            port=18080,
+            port=port,
             log_level="error",
         )
     )
@@ -64,9 +74,9 @@ def gateway_18080() -> Iterator[str]:
     if not server.started:
         server.should_exit = True
         thread.join(timeout=5)
-        raise RuntimeError("gateway did not start on port 18080")
+        raise RuntimeError(f"gateway did not start on port {port}")
     try:
-        yield "http://127.0.0.1:18080"
+        yield f"http://127.0.0.1:{port}"
     finally:
         server.should_exit = True
         thread.join(timeout=10)
@@ -74,10 +84,10 @@ def gateway_18080() -> Iterator[str]:
 
 def test_post_scan_returns_findings(
     tree_sitter_binding,
-    gateway_18080: str,
+    gateway_url: str,
 ) -> None:
     response = httpx.post(
-        f"{gateway_18080}/v0.5/004/scan",
+        f"{gateway_url}/v0.5/004/scan",
         json={
             "repo_path": str(PROJECT_ROOT / "samples" / "mini_repo"),
             "languages": ["python"],
@@ -94,10 +104,10 @@ def test_post_scan_returns_findings(
 
 def test_health_endpoint_reports_code_ok(
     tree_sitter_binding,
-    gateway_18080: str,
+    gateway_url: str,
 ) -> None:
     response = httpx.get(
-        f"{gateway_18080}/v0.5/health",
+        f"{gateway_url}/v0.5/health",
         timeout=10,
     )
 
