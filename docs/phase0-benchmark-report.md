@@ -65,7 +65,7 @@ Opengrep 二进制保存在被 Git 忽略的 `tools/opengrep/v1.26.0/`，不进�
 ```powershell
 $env:PYTHONPATH = "src;$((Resolve-Path '.python-deps').Path)"
 
-& 'C:\Users\15072\AppData\Local\Programs\Python\Python314\python.exe' `
+& "$env:LOCALAPPDATA\Programs\Python\Python314\python.exe" `
   -m benchmarks.phase0.benchmark `
   --engine all `
   --opengrep tools/opengrep/v1.26.0/opengrep.exe `
