@@ -7,11 +7,21 @@ import json
 import os
 import shutil
 import sys
+import tempfile
+import time
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from shared_llm_core import LLMRouter
 
+from ai_code_audit.backends import BackendError, ScanRequest, scan_with_backend
+from ai_code_audit.gitutils import GitDiffError, collect_diff
+from ai_code_audit.hybrid_cli import (
+    CLIInputError,
+    _materialize_repo,
+    _payload_from_args,
+)
 from ai_code_audit.output import (
     export_sarif,
     render_envelope,
@@ -22,16 +32,9 @@ from ai_code_audit.postprocess import (
     postprocess_envelope,
     write_baseline,
 )
-from ai_code_audit.backends import BackendError, ScanRequest, scan_with_backend
-from ai_code_audit.gitutils import GitDiffError, collect_diff
 from ai_code_audit.scanner import scan_diff, scan_repository
 from ai_code_audit.triage import FindingTriageReviewer, RouterLike
 from ai_code_audit.triage_context import redact_sensitive_text
-from ai_code_audit.hybrid_cli import (
-    CLIInputError,
-    _materialize_repo,
-    _payload_from_args,
-)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OPENGREP_RULES = PROJECT_ROOT / "rules" / "opengrep"
@@ -111,8 +114,9 @@ def scan_payload(
                     timeout=_backend_timeout(),
                 )
                 if diff is not None and diff_scope is not None:
-                    envelope["summary"]["repository_source"] = "git-diff"
-                    envelope["summary"]["diff"] = {
+                    summary, _, _ = _scan_result_parts(envelope)
+                    summary["repository_source"] = "git-diff"
+                    summary["diff"] = {
                         "base": diff["base"],
                         "head": diff["head"],
                         "files": list(diff_scope.files),
@@ -125,12 +129,10 @@ def scan_payload(
             ValueError,
         ) as error:
             raise CLIInputError(str(error)) from error
+        summary, _, warnings = _scan_result_parts(envelope)
         if diff is None:
-            envelope["summary"]["repository_source"] = repository_source
-        envelope["warnings"] = [
-            *acquisition_warnings,
-            *envelope["warnings"],
-        ]
+            summary["repository_source"] = repository_source
+        envelope["warnings"] = [*acquisition_warnings, *warnings]
         try:
             envelope = postprocess_envelope(
                 envelope,
@@ -139,24 +141,45 @@ def scan_payload(
             )
         except BaselineError as error:
             raise CLIInputError(str(error)) from error
-        envelope["summary"]["mode"] = mode
+        summary, findings, _ = _scan_result_parts(envelope)
+        summary["mode"] = mode
         if baseline_output is not None:
             try:
                 written = write_baseline(
                     baseline_output,
-                    envelope["findings"],
+                    findings,
                     repo_path=repo_path,
                 )
             except BaselineError as error:
                 raise CLIInputError(str(error)) from error
-            envelope["summary"]["baseline_written"] = {
+            summary["baseline_written"] = {
                 "path": str(written),
-                "findings": len(envelope["findings"]),
+                "findings": len(findings),
             }
         if mode == "hybrid":
             triage_envelope(envelope, repo_path=repo_path, router=router)
         _apply_gate(envelope, fail_on)
         return envelope
+
+
+def _scan_result_parts(
+    envelope: Mapping[str, object],
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
+    """Validate stage boundaries before indexing or exporting scan results."""
+    summary = envelope.get("summary")
+    if not isinstance(summary, dict):
+        raise CLIInputError("scan result summary must be an object")
+    files_scanned = summary.get("files_scanned")
+    if (not isinstance(files_scanned, int) or isinstance(files_scanned, bool)
+            or files_scanned < 0):
+        raise CLIInputError("scan result summary.files_scanned must be a nonnegative integer")
+    findings = envelope.get("findings")
+    if not isinstance(findings, list) or not all(isinstance(item, dict) for item in findings):
+        raise CLIInputError("scan result findings must be a list of objects")
+    warnings = envelope.get("warnings")
+    if not isinstance(warnings, list) or not all(isinstance(item, str) for item in warnings):
+        raise CLIInputError("scan result warnings must be a list of strings")
+    return summary, findings, warnings
 
 
 def triage_envelope(
@@ -176,7 +199,8 @@ def triage_envelope(
         try:
             active_router = LLMRouter.from_env()
             owns_router = True
-        except Exception as error:
+        # Provider/configuration failures must not discard the static report.
+        except Exception as error:  # noqa: BLE001
             _append_warning(envelope, _triage_unavailable_warning(error))
             _set_triage_summary(
                 envelope,
@@ -219,7 +243,8 @@ def triage_envelope(
             if callable(close):
                 try:
                     close()
-                except Exception as error:
+                # Optional provider cleanup must not replace the scan outcome.
+                except Exception as error:  # noqa: BLE001
                     _append_warning(
                         envelope,
                         _triage_unavailable_warning(error).replace(
@@ -495,11 +520,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.fail_on is not None:
             payload["fail_on"] = args.fail_on
         envelope = scan_payload(payload)
+        summary, findings, _ = _scan_result_parts(envelope)
     except (CLIInputError, json.JSONDecodeError) as error:
         return _input_error(str(error), args.json)
 
     if args.output == "sarif":
-        document = export_sarif(envelope["findings"])
+        document = export_sarif(findings)
         try:
             output_path = _write_output(args.output_file, render_sarif(document))
         except OSError as error:
@@ -521,10 +547,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.json:
         print(render_envelope(envelope))
     else:
-        summary = envelope["summary"]
         print(
             f"Scanned {summary['files_scanned']} files; "
-            f"found {len(envelope['findings'])} issue(s)."
+            f"found {len(findings)} issue(s)."
         )
     return _gate_exit_code(envelope)
 
@@ -649,13 +674,37 @@ def _write_output(raw_path: str, text: str) -> Path:
     if output_path.is_dir():
         raise IsADirectoryError(f"{output_path} is a directory")
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = output_path.with_name(f".{output_path.name}.{os.getpid()}.tmp")
+    # Exclusive, random names prevent both same-process request collisions and
+    # truncation of a pre-existing predictable temporary file. Keep the handle
+    # open while writing, then close it before replace (required on Windows).
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=output_path.parent, prefix=f".{output_path.name}.", suffix=".tmp",
+    )
+    temporary = Path(temporary_name)
     try:
-        temporary.write_text(text, encoding="utf-8", newline="\n")
-        os.replace(temporary, output_path)
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+        _replace_report(temporary, output_path)
     finally:
         temporary.unlink(missing_ok=True)
     return output_path
+
+
+def _replace_report(temporary: Path, output_path: Path) -> None:
+    """Bounded retry for Windows sharing/access errors during concurrent replace.
+
+    Each attempt uses the same fully written exclusive temporary file. Other
+    errors fail immediately; persistent locks/ACL failures still propagate.
+    This is last-successful-writer-wins, not transactional report merging.
+    """
+    for attempt in range(5):
+        try:
+            os.replace(temporary, output_path)
+            return
+        except PermissionError as error:
+            if getattr(error, "winerror", None) not in {5, 32, 33} or attempt == 4:
+                raise
+            time.sleep(0.01 * (attempt + 1))
 
 
 def _gate_exit_code(envelope: Mapping[str, object]) -> int:
