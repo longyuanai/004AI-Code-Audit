@@ -14,6 +14,7 @@
 静态/AI Precision、Recall 均为 80%，本次没有指标提升。
 软件固定为 `1ef74c9`，本地标签 `v1.0.0-graduation`；正式交付含 17 页论文 PDF、
 11 页答辩 PPT 和源码快照，见 [验收与交付记录](docs/graduation/acceptance.md)。
+另按用户提供范文补充 19 页可编辑 Word，个人信息留空，见[论文格式核验](docs/graduation/thesis-format.md)。
 新 Web 不改变下文既有 CLI 扫描规则和 FindingSource。
 
 ## 当前开发文档（2026-09-23）
