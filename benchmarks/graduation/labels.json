@@ -1,0 +1,27 @@
+{
+  "dataset_version": "graduation-python-synthetic-20261009",
+  "source": "本项目手工编写的受控合成样例；源代码仅静态解析，从不执行",
+  "unit": "每个样例判断是否存在至少一项被标注的目标规则发现；额外发现计作错误类型，不用于扩大 TP",
+  "samples": [
+    {"id":"command-input","source":"import os\nos.system(input())\n","rule":"CG-PY-001","positive":true,"reason":"不可信交互输入进入 shell"},
+    {"id":"command-alias","source":"from subprocess import run as r\nr(input(), shell=True)\n","rule":"CG-PY-001","positive":true,"reason":"显式启用 shell，未限定输入"},
+    {"id":"sql-format","source":"def run(cursor, name):\n    cursor.execute(f'SELECT * FROM users WHERE name={name}')\n","rule":"CG-PY-002","positive":true,"reason":"动态拼接数据库查询"},
+    {"id":"sql-variable","source":"def run(cursor, name):\n    query = f'SELECT * FROM users WHERE name={name}'\n    cursor.execute(query)\n","rule":"CG-PY-002","positive":true,"reason":"SQL 动态值经变量传递，当前 AST 模式不追踪变量"},
+    {"id":"pickle","source":"import pickle\npickle.loads(data)\n","rule":"CG-PY-003","positive":true,"reason":"对象反序列化，来源假定不可信"},
+    {"id":"yaml","source":"import yaml\nyaml.load(data)\n","rule":"CG-PY-003","positive":true,"reason":"未指定安全 YAML loader"},
+    {"id":"eval","source":"value = input()\neval(value)\n","rule":"CG-PY-004","positive":true,"reason":"用户输入进入动态代码执行"},
+    {"id":"exec","source":"exec(input())\n","rule":"CG-PY-004","positive":true,"reason":"用户输入进入 exec"},
+    {"id":"secret","source":"API_KEY = 'synthetic-credential-for-labelled-sample'\n","rule":"CG-PY-005","positive":true,"reason":"假设为有效凭据的合成字符串，不能视为真实泄露"},
+    {"id":"secret-dict","source":"settings = {'password': 'synthetic-credential-only'}\n","rule":"CG-PY-005","positive":true,"reason":"字典字段硬编码，当前规则仅检查赋值目标"},
+    {"id":"safe-command","source":"import subprocess\nsubprocess.run(['echo', value], shell=False)\n","rule":"CG-PY-001","positive":false,"reason":"参数数组且不启用 shell"},
+    {"id":"constant-command","source":"import os\nos.system('echo hello')\n","rule":"CG-PY-001","positive":false,"reason":"固定无外部输入命令；保守模式可能误报"},
+    {"id":"safe-sql","source":"cursor.execute('SELECT * FROM users WHERE name=?', (name,))\n","rule":"CG-PY-002","positive":false,"reason":"参数绑定"},
+    {"id":"safe-json","source":"import json\njson.loads(data)\n","rule":"CG-PY-003","positive":false,"reason":"JSON 数据解析不恢复可执行对象"},
+    {"id":"safe-yaml","source":"import yaml\nyaml.safe_load(data)\n","rule":"CG-PY-003","positive":false,"reason":"safe_load"},
+    {"id":"safe-yaml-loader","source":"import yaml\nyaml.load(data, Loader=yaml.SafeLoader)\n","rule":"CG-PY-003","positive":false,"reason":"显式安全 loader"},
+    {"id":"safe-literal","source":"import ast\nast.literal_eval(data)\n","rule":"CG-PY-004","positive":false,"reason":"限定字面量解析"},
+    {"id":"constant-eval","source":"eval('1 + 1')\n","rule":"CG-PY-004","positive":false,"reason":"无外部输入常量，保守模式可能误报"},
+    {"id":"safe-secret-env","source":"import os\nAPI_KEY = os.environ['API_KEY']\n","rule":"CG-PY-005","positive":false,"reason":"从环境读取"},
+    {"id":"safe-comment","source":"# eval(input())\ntext = 'pickle.loads(data)'\n","rule":"CG-PY-004","positive":false,"reason":"注释和字符串不是调用"}
+  ]
+}

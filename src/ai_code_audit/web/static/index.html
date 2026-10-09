@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>AI-Code-Audit · 源代码安全检测</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<header><div class="brand">龙渊 · AI-Code-Audit</div><h1>源代码安全检测</h1><p>Python 源码快照 · 静态规则发现 · AI 辅助复核</p><span class="badge">本地单用户演示</span></header>
+<main>
+<div id="message" role="status" aria-live="polite"></div>
+<section><h2>1. 导入代码</h2><p>仅支持 UTF-8 的 .py 文件。最多 100 个文件、单文件 512 KiB、项目 8 MiB。扫描只读取代码。</p>
+<label>项目名称<input id="project-name" maxlength="80" placeholder="例如：课程实验项目"></label>
+<div class="input-row"><label>选择文件或 ZIP<input id="file-input" type="file" accept=".py,.zip" multiple></label><label>选择项目目录<input id="directory-input" type="file" webkitdirectory multiple></label></div>
+<p id="selection">尚未选择文件</p><button id="import-button">导入项目快照</button></section>
+<section><h2>2. 项目与扫描</h2><div id="projects" class="list"></div></section>
+<section><div class="row"><h2>3. 检测历史</h2><button id="refresh-button" class="secondary">刷新</button></div><div id="tasks" class="list"></div></section>
+<section id="detail" hidden><h2 id="detail-title">任务详情</h2><pre id="task-summary"></pre><div class="row"><label class="consent"><input id="ai-consent" type="checkbox">同意向服务端配置的模型发送脱敏后的有限代码片段（最多 20 项发现）</label><button id="ai-button">AI 辅助分析</button></div><div id="exports" class="row"></div><div class="row"><label>风险等级<select id="severity-filter"><option value="all">全部</option><option>high</option><option>medium</option><option>low</option></select></label></div><div id="findings"></div></section>
+<footer>静态命中属于潜在风险，AI 判断属于推断；本版本没有人工确认或漏洞复现流程。零发现不代表安全，修复前请人工复核。</footer>
+</main></body></html>

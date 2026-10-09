@@ -158,3 +158,10 @@ C3 第一阶段（2026-09-24，提交 5a5f0bb，合并 main 后推送，远程 C
 
 优先交付可安装 CLI + 报告样例 + 复现脚本，随后做 CI 使用说明和小范围试用。产品和漏洞模块分别提交；发布记录写明两个提交版本和契约版本。
 任务见 [TODO](TODO.md)，其他模型从 [交接指南](../../docs/MODEL-HANDOFF.md) 的 C0/C1 开始。
+
+## 10. 本地毕业设计扩展 2026-10-09
+
+新增受限 Python 源码快照、五类 AST 风险、SQLite 四表关联、工作进程硬超时、
+回环 Web 和 HTML/JSON/SARIF。AI 经明确同意调用既有路由，独立保存结果而不覆盖
+静态证据。原 CLI/契约保持。[系统设计](graduation/system-design.md) 说明数据库/API，
+[测试报告](tests/graduation-test-report.md) 说明实际证据与未完成项；未升级发布状态。

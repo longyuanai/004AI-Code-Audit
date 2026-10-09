@@ -1,0 +1,1211 @@
+{
+  "dataset_version": "graduation-python-synthetic-20261009",
+  "dataset_sha256": "aa5831dc9fa13634c5781b2ac28e0d46ca9355f3dd4ca510fd7541f5c936291e",
+  "samples": 20,
+  "repeat": 3,
+  "python": "3.14.6",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "ruleset": "graduation-python-1",
+  "server_version": "0.40.0",
+  "model_digest": "357c53fb659c5076de1d65ccb0b397446227b71a42be9d1603d46168015c9e4b",
+  "parameters": {
+    "temperature": 0,
+    "max_tokens": 500,
+    "response_format": "json_object",
+    "retries": 0
+  },
+  "prompt_sources": [
+    "src/ai_code_audit/triage.py",
+    "src/ai_code_audit/triage_context.py",
+    "shared_llm_core/untrusted.py"
+  ],
+  "policy": "Only confirmed=false removes a candidate in the evaluation filter; errors retain static findings. AI cannot discover missing candidates. Product does not remove findings.",
+  "limitations": "20 manually labelled synthetic samples, no independent label review. Repeated local inference does not establish general accuracy or human-confirmed vulnerabilities.",
+  "runs": [
+    {
+      "run": 1,
+      "static": {
+        "tp": 8,
+        "fp": 2,
+        "fn": 2,
+        "tn": 8,
+        "precision": 0.8,
+        "recall": 0.8
+      },
+      "ai_filtered": {
+        "tp": 8,
+        "fp": 2,
+        "fn": 2,
+        "tn": 8,
+        "precision": 0.8,
+        "recall": 0.8
+      },
+      "successful_reviews": 10,
+      "failed_reviews": 0,
+      "mean_scan_seconds": 0.001923205000002781,
+      "mean_ai_seconds_all_samples": 0.43725734499985264,
+      "cases": [
+        {
+          "id": "command-input",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.004592400000547059,
+          "ai_seconds": 0.9789485999990575,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了os.system(input())，这可能导致命令注入攻击，因为用户输入会被直接执行。",
+                "remediation": "应使用os.popen或os.system的替代方法来限制命令的执行，或者使用更安全的方式来处理用户输入，例如使用os.system('echo ' + input())",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 323,
+                "completion_tokens": 90,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "command-alias",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0022415000003093155,
+          "ai_seconds": 1.0624739000013506,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了 subprocess 模块的 run 函数，并且直接传递了用户可控的 input 参数给 shell=True，这可能导致命令注入攻击。",
+                "remediation": "将 shell 参数设置为 False，以防止 shell 解释器被调用，或者使用更安全的替代方法来处理用户输入，例如使用 os.system 或 os.popen。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 330,
+                "completion_tokens": 102,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "sql-format",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0037174000008235453,
+          "ai_seconds": 0.9001201999999466,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中直接将用户输入插入到 SQL 查询中，存在 SQL 注入风险。",
+                "remediation": "使用参数化查询来防止 SQL 注入攻击，例如使用 `cursor.execute(f'SELECT * FROM users WHERE name=%s', (name,))`",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 349,
+                "completion_tokens": 83,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "sql-variable",
+          "static_outcome": "fn",
+          "ai_filtered_outcome": "fn",
+          "scan_seconds": 0.0016830000004119938,
+          "ai_seconds": 6.50000038149301e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "pickle",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0015227000003505964,
+          "ai_seconds": 1.0049459000001661,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用pickle.loads(data)来反序列化数据，这可能导致任意代码执行，因为数据来源不可信。",
+                "remediation": "使用pickle.loads(data)时，应确保data是经过验证和安全的，或者使用更安全的替代方案如json.loads()或其他安全的序列化/反序列化方法。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 326,
+                "completion_tokens": 96,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "yaml",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0013996999987284653,
+          "ai_seconds": 0.8927260999989812,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了不安全的 `yaml.load(data)` 方法来加载数据，这可能导致反序列化攻击。",
+                "remediation": "使用 `yaml.safe_load(data)` 替换 `yaml.load(data)`，以防止未验证的数据导致的安全问题。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 326,
+                "completion_tokens": 81,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "eval",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0015377999989141244,
+          "ai_seconds": 0.7166416000000027,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了eval函数来执行用户输入，这可能导致动态代码执行的安全风险。",
+                "remediation": "将eval函数替换为安全的替代方法，例如使用参数化查询或验证输入的合法性。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 321,
+                "completion_tokens": 72,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "exec",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0023562999995192513,
+          "ai_seconds": 0.8163588000006712,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了exec函数来执行输入，这可能导致任意代码执行的安全风险。",
+                "remediation": "将exec函数替换为更安全的函数或方法，例如使用eval或直接处理输入数据，确保其安全性。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 316,
+                "completion_tokens": 75,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "secret",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0019277999999758322,
+          "ai_seconds": 0.7085198999993736,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中硬编码了敏感信息，这可能导致API密钥被泄露。",
+                "remediation": "将API密钥替换为环境变量或配置文件中的安全存储方式",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 330,
+                "completion_tokens": 63,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "secret-dict",
+          "static_outcome": "fn",
+          "ai_filtered_outcome": "fn",
+          "scan_seconds": 0.001800300000468269,
+          "ai_seconds": 6.300000677583739e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-command",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0016552999986743089,
+          "ai_seconds": 6.800000846851617e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "constant-command",
+          "static_outcome": "fp",
+          "ai_filtered_outcome": "fp",
+          "scan_seconds": 0.001363199999104836,
+          "ai_seconds": 0.8034038999994664,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了os.system函数执行命令，存在命令注入的风险。",
+                "remediation": "将os.system替换为安全的命令执行方式，例如使用subprocess模块的check_output方法，确保命令参数的安全性。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 327,
+                "completion_tokens": 74,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-sql",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0027740999994421145,
+          "ai_seconds": 6.599999323952943e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-json",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0014115000012679957,
+          "ai_seconds": 7.79999936639797e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-yaml",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.001571900000271853,
+          "ai_seconds": 4.899999112240039e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-yaml-loader",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0013352000005397713,
+          "ai_seconds": 4.800000169780105e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-literal",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0012036000007356051,
+          "ai_seconds": 3.600000127335079e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "constant-eval",
+          "static_outcome": "fp",
+          "ai_filtered_outcome": "fp",
+          "scan_seconds": 0.0012163999999756925,
+          "ai_seconds": 0.8609483999989607,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中包含动态代码执行，通过eval函数执行了预设的JavaScript表达式。",
+                "remediation": "将eval函数替换为安全的数学运算，例如使用内置的算术运算符，如加法运算符（+）",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 324,
+                "completion_tokens": 78,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-secret-env",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0017138000002887566,
+          "ai_seconds": 6.7999990278622136e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-comment",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0014401999997062376,
+          "ai_seconds": 5.500000042957254e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "static": {
+        "tp": 8,
+        "fp": 2,
+        "fn": 2,
+        "tn": 8,
+        "precision": 0.8,
+        "recall": 0.8
+      },
+      "ai_filtered": {
+        "tp": 8,
+        "fp": 2,
+        "fn": 2,
+        "tn": 8,
+        "precision": 0.8,
+        "recall": 0.8
+      },
+      "successful_reviews": 10,
+      "failed_reviews": 0,
+      "mean_scan_seconds": 0.0014907849997143785,
+      "mean_ai_seconds_all_samples": 0.4230063599999994,
+      "cases": [
+        {
+          "id": "command-input",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0015877999994700076,
+          "ai_seconds": 0.9790954000000056,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了os.system(input())，这可能导致命令注入攻击，因为用户输入会被直接执行。",
+                "remediation": "应使用os.popen或os.system的替代方法来限制命令的执行，或者使用更安全的方式来处理用户输入，例如使用os.system('echo ' + input())",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 323,
+                "completion_tokens": 90,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "command-alias",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0015347999997175066,
+          "ai_seconds": 0.9969788999987941,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了 subprocess 模块的 run 函数，并且直接传递了用户可控的 input 参数给 shell=True，这可能导致命令注入攻击。",
+                "remediation": "将 shell 参数设置为 False，以防止 shell 解释器被调用，或者使用更安全的替代方法来处理用户输入，例如使用 os.system 或 os.popen。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 330,
+                "completion_tokens": 102,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "sql-format",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.001550300001326832,
+          "ai_seconds": 0.8190919000007852,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中直接将用户输入插入到 SQL 查询中，存在 SQL 注入风险。",
+                "remediation": "使用参数化查询来防止 SQL 注入攻击，例如使用 `cursor.execute(f'SELECT * FROM users WHERE name=%s', (name,))`",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 349,
+                "completion_tokens": 83,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "sql-variable",
+          "static_outcome": "fn",
+          "ai_filtered_outcome": "fn",
+          "scan_seconds": 0.0015709999988757772,
+          "ai_seconds": 5.500000042957254e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "pickle",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0015739999998913845,
+          "ai_seconds": 0.976126600000498,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用pickle.loads(data)来反序列化数据，这可能导致任意代码执行，因为数据来源不可信。",
+                "remediation": "使用pickle.loads(data)时，应确保data是经过验证和安全的，或者使用更安全的替代方案如json.loads()或其他安全的序列化/反序列化方法。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 326,
+                "completion_tokens": 96,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "yaml",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0013901000002078945,
+          "ai_seconds": 0.8056434000009176,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了不安全的 `yaml.load(data)` 方法来加载数据，这可能导致反序列化攻击。",
+                "remediation": "使用 `yaml.safe_load(data)` 替换 `yaml.load(data)`，以防止未验证的数据导致的安全问题。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 326,
+                "completion_tokens": 81,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "eval",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0015550999996776227,
+          "ai_seconds": 0.7516546999995626,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了eval函数来执行用户输入，这可能导致动态代码执行的安全风险。",
+                "remediation": "将eval函数替换为安全的替代方法，例如使用参数化查询或验证输入的合法性。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 321,
+                "completion_tokens": 72,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "exec",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0015904000010777963,
+          "ai_seconds": 0.7505799000009574,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了exec函数来执行输入，这可能导致任意代码执行的安全风险。",
+                "remediation": "将exec函数替换为更安全的函数或方法，例如使用eval或直接处理输入数据，确保其安全性。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 316,
+                "completion_tokens": 75,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "secret",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0017454000008001458,
+          "ai_seconds": 0.7418668999998772,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中硬编码了敏感信息，这可能导致API密钥在应用程序中被泄露。",
+                "remediation": "将API密钥存储在环境变量或配置文件中，而不是硬编码在代码中。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 330,
+                "completion_tokens": 71,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "secret-dict",
+          "static_outcome": "fn",
+          "ai_filtered_outcome": "fn",
+          "scan_seconds": 0.001677299998846138,
+          "ai_seconds": 6.399999620043673e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-command",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0015231999987008749,
+          "ai_seconds": 5.600000804406591e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "constant-command",
+          "static_outcome": "fp",
+          "ai_filtered_outcome": "fp",
+          "scan_seconds": 0.0013657999988936353,
+          "ai_seconds": 0.8272966999993514,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了os.system函数执行命令，存在命令注入的风险。",
+                "remediation": "将os.system替换为安全的命令执行方式，例如使用subprocess模块的check_output方法，确保命令参数的安全性。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 327,
+                "completion_tokens": 74,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-sql",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.001478500000303029,
+          "ai_seconds": 6.399999620043673e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-json",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0013378000003285706,
+          "ai_seconds": 5.699999746866524e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-yaml",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0012443999985407572,
+          "ai_seconds": 3.99999953515362e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-yaml-loader",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.001404799999363604,
+          "ai_seconds": 6.8999997893115506e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-literal",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0011505999991641147,
+          "ai_seconds": 3.4000004234258085e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "constant-eval",
+          "static_outcome": "fp",
+          "ai_filtered_outcome": "fp",
+          "scan_seconds": 0.0013605999993160367,
+          "ai_seconds": 0.8117373000004591,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中包含动态代码执行，通过eval函数执行了预设的JavaScript表达式。",
+                "remediation": "将eval函数替换为安全的数学运算，例如使用内置的算术运算符，如加法运算符（+）",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 324,
+                "completion_tokens": 78,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-secret-env",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0017583000008016825,
+          "ai_seconds": 6.8999997893115506e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-comment",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.00141549999898416,
+          "ai_seconds": 4.699999408330768e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "static": {
+        "tp": 8,
+        "fp": 2,
+        "fn": 2,
+        "tn": 8,
+        "precision": 0.8,
+        "recall": 0.8
+      },
+      "ai_filtered": {
+        "tp": 8,
+        "fp": 2,
+        "fn": 2,
+        "tn": 8,
+        "precision": 0.8,
+        "recall": 0.8
+      },
+      "successful_reviews": 10,
+      "failed_reviews": 0,
+      "mean_scan_seconds": 0.0014539849999891884,
+      "mean_ai_seconds_all_samples": 0.42673777499994686,
+      "cases": [
+        {
+          "id": "command-input",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0014878000001772307,
+          "ai_seconds": 1.0147237000001041,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了os.system(input())，这可能导致命令注入攻击，因为用户输入会被直接执行。",
+                "remediation": "应使用os.popen或os.system的替代方法来限制命令的执行，或者使用更安全的方式来处理用户输入，例如使用os.system('echo ' + input())",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 323,
+                "completion_tokens": 90,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "command-alias",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0014009999995323597,
+          "ai_seconds": 1.0384986999997636,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了 subprocess 模块的 run 函数，并且直接传递了用户可控的 input 参数给 shell=True，这可能导致命令注入攻击。",
+                "remediation": "将 shell 参数设置为 False，以防止 shell 解释器被调用，或者使用更安全的替代方法来处理用户输入，例如使用 os.system 或 os.popen。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 330,
+                "completion_tokens": 102,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "sql-format",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0014800999997532926,
+          "ai_seconds": 0.845039199999519,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中直接将用户输入插入到 SQL 查询中，存在 SQL 注入风险。",
+                "remediation": "使用参数化查询来防止 SQL 注入攻击，例如使用 `cursor.execute(f'SELECT * FROM users WHERE name=%s', (name,))`",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 349,
+                "completion_tokens": 83,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "sql-variable",
+          "static_outcome": "fn",
+          "ai_filtered_outcome": "fn",
+          "scan_seconds": 0.001408399999490939,
+          "ai_seconds": 6.199999916134402e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "pickle",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0012033999992127065,
+          "ai_seconds": 0.9469939000009617,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用pickle.loads(data)来反序列化数据，这可能导致任意代码执行，因为数据来源不可信。",
+                "remediation": "使用pickle.loads(data)时，应确保data是经过验证和安全的，或者使用更安全的替代方案如json.loads()或其他安全的序列化/反序列化方法。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 326,
+                "completion_tokens": 96,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "yaml",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.001392199999827426,
+          "ai_seconds": 0.8250382000005629,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了不安全的 `yaml.load(data)` 方法来加载数据，这可能导致反序列化攻击。",
+                "remediation": "使用 `yaml.safe_load(data)` 替换 `yaml.load(data)`，以防止未验证的数据导致的安全问题。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 326,
+                "completion_tokens": 81,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "eval",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0014776000007259427,
+          "ai_seconds": 0.7375628999998298,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了eval函数来执行用户输入，这可能导致动态代码执行的安全风险。",
+                "remediation": "将eval函数替换为安全的替代方法，例如使用参数化查询或验证输入的合法性。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 321,
+                "completion_tokens": 72,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "exec",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.0016140999996423488,
+          "ai_seconds": 0.7566893000002892,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了exec函数来执行输入，这可能导致任意代码执行的安全风险。",
+                "remediation": "将exec函数替换为更安全的函数或方法，例如使用eval或直接处理输入数据，确保其安全性。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 316,
+                "completion_tokens": 75,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "secret",
+          "static_outcome": "tp",
+          "ai_filtered_outcome": "tp",
+          "scan_seconds": 0.001861500000813976,
+          "ai_seconds": 0.761484599999676,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中硬编码了敏感信息，这可能导致API密钥在应用程序中被泄露。",
+                "remediation": "将API密钥存储在环境变量或配置文件中，而不是硬编码在代码中。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 330,
+                "completion_tokens": 71,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "secret-dict",
+          "static_outcome": "fn",
+          "ai_filtered_outcome": "fn",
+          "scan_seconds": 0.0016840000007505296,
+          "ai_seconds": 6.099999154685065e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-command",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0012974000001122477,
+          "ai_seconds": 4.900000931229442e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "constant-command",
+          "static_outcome": "fp",
+          "ai_filtered_outcome": "fp",
+          "scan_seconds": 0.0014068000000406755,
+          "ai_seconds": 0.8050153999993199,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中使用了os.system函数执行命令，存在命令注入的风险。",
+                "remediation": "将os.system替换为安全的命令执行方式，例如使用subprocess模块的check_output方法，确保命令参数的安全性。",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 327,
+                "completion_tokens": 74,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-sql",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0014223999987734715,
+          "ai_seconds": 6.099999154685065e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-json",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.001430399999662768,
+          "ai_seconds": 4.899999112240039e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-yaml",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0014233000001695473,
+          "ai_seconds": 4.800000169780105e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-yaml-loader",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0015537999988737283,
+          "ai_seconds": 5.40000110049732e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-literal",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0013319000008777948,
+          "ai_seconds": 4.999999873689376e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "constant-eval",
+          "static_outcome": "fp",
+          "ai_filtered_outcome": "fp",
+          "scan_seconds": 0.001581300000907504,
+          "ai_seconds": 0.8036558000003424,
+          "ai": {
+            "analyses": [
+              {
+                "status": "reviewed",
+                "confirmed": true,
+                "confidence": 0.7,
+                "explanation": "代码中包含动态代码执行，通过eval函数执行了预设的JavaScript表达式。",
+                "remediation": "将eval函数替换为安全的数学运算，例如使用内置的算术运算符，如加法运算符（+）",
+                "model": "qwen2.5:3b-instruct-q4_K_M",
+                "prompt_tokens": 324,
+                "completion_tokens": 78,
+                "cached": false,
+                "error": null
+              }
+            ],
+            "status": "completed"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-secret-env",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0014274999994086102,
+          "ai_seconds": 6.000000212225132e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        },
+        {
+          "id": "safe-comment",
+          "static_outcome": "tn",
+          "ai_filtered_outcome": "tn",
+          "scan_seconds": 0.0011948000010306714,
+          "ai_seconds": 4.399998942972161e-06,
+          "ai": {
+            "analyses": [],
+            "status": "not_applicable"
+          },
+          "static_unchanged": true
+        }
+      ]
+    }
+  ]
+}

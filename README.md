@@ -1,5 +1,19 @@
 > 2026-09-23 重组：能力归属见 [CAPABILITIES.md](CAPABILITIES.md)，启动入口见父目录 README。以下保留原项目说明。
 
+## Python 毕业设计本地 Web（2026-10-09）
+
+原仓新增本地单用户 Web、受限 Python 文件/目录/ZIP 快照导入、五类 AST 风险
+规则、SQLite 项目与扫描历史、可选 AI 复核及 HTML/JSON/SARIF 报告。安装后运行
+`ai-code-audit-web --port 8765 --data-dir artifacts/web-data`，仅监听回环地址。
+[部署手册](docs/graduation/deployment.md) · [基线审计](docs/audits/graduation-baseline.md)
+· [测试报告](docs/tests/graduation-test-report.md) · [材料索引](docs/graduation/README.md)。
+
+现场 Python 集成 427 passed，TS 593 passed/2 skipped，类型/Lint/构建通过；
+30 包离线安装与 13 项安装版检查通过，真实浏览器业务和模型降级通过。
+本机 Ollama 的 qwen2.5:3b-instruct-q4_K_M 已完成真实成功及三轮同样本复核，
+静态/AI Precision、Recall 均为 80%，本次没有指标提升。验收提交与导出证据见材料索引。
+新 Web 不改变下文既有 CLI 扫描规则和 FindingSource。
+
 ## 当前开发文档（2026-09-23）
 
 当前技术规范见 [docs/tech-spec.md](docs/tech-spec.md)，任务见 [docs/TODO.md](docs/TODO.md)，跨项目交接见 [根模型指南](../docs/MODEL-HANDOFF.md)。下文保留原仓使用说明；旧目录编号、旧状态与旧商业计划以当前技术规范为准。包名和 API 来源保持兼容。
@@ -567,3 +581,12 @@ Current known limitations:
 - [docs/design/CONFIGURATION.md](./docs/design/CONFIGURATION.md) — configuration model, defaults, env overrides, and runtime consumption boundaries
 - [docs/design/RULES.md](./docs/design/RULES.md) — current built-in + custom rule loading behavior, rule behaviors, and known limits
 - [docs/design/REPORTING.md](./docs/design/REPORTING.md) — text / JSON / SARIF output behavior and current output constraints
+
+## 2026-10-07 本机交付
+
+完成隔离安装与builtin真实自有项目扫描，修复报告临时文件碰撞和Windows短暂替换冲突。
+续轮Python integration 370 passed；CLI Ruff与strict mypy通过。上一轮TS 593 passed/2 skipped，build/lint/typecheck通过；续轮未改TS。
+真实36文件扫描0发现不代表安全；独立人类签署与生产发布仍pending。
+范围、证据、安装命令与局限见 [本机交付验证](docs/local-delivery-20261007.md)。
+
+续轮增加扫描结果边界校验：损坏结果退出2且保留既有报告，不静默丢弃非法发现。详见 [续轮验证](docs/local-delivery-20261007-continue.md)。

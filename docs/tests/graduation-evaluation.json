@@ -1,0 +1,473 @@
+{
+  "dataset_version": "graduation-python-synthetic-20261009",
+  "samples": 20,
+  "python": "3.14.6",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "ruleset": "graduation-python-1",
+  "repeat": 3,
+  "runs": [
+    {
+      "tp": 8,
+      "fp": 2,
+      "fn": 2,
+      "tn": 8,
+      "precision": 0.8,
+      "recall": 0.8,
+      "mean_scan_seconds": 0.0016938449998633587,
+      "cases": [
+        {
+          "id": "command-input",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-001"
+          ],
+          "duration_seconds": 0.0033494999988761265
+        },
+        {
+          "id": "command-alias",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-001"
+          ],
+          "duration_seconds": 0.0019359999987500487
+        },
+        {
+          "id": "sql-format",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-002"
+          ],
+          "duration_seconds": 0.0016985000002023298
+        },
+        {
+          "id": "sql-variable",
+          "outcome": "fn",
+          "detected_rules": [],
+          "duration_seconds": 0.0016562000000703847
+        },
+        {
+          "id": "pickle",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-003"
+          ],
+          "duration_seconds": 0.001817500000470318
+        },
+        {
+          "id": "yaml",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-003"
+          ],
+          "duration_seconds": 0.0015395999998872867
+        },
+        {
+          "id": "eval",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-004"
+          ],
+          "duration_seconds": 0.001441000000340864
+        },
+        {
+          "id": "exec",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-004"
+          ],
+          "duration_seconds": 0.002004900001338683
+        },
+        {
+          "id": "secret",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-005"
+          ],
+          "duration_seconds": 0.0014668999992863974
+        },
+        {
+          "id": "secret-dict",
+          "outcome": "fn",
+          "detected_rules": [],
+          "duration_seconds": 0.001552300000184914
+        },
+        {
+          "id": "safe-command",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0017852999990282115
+        },
+        {
+          "id": "constant-command",
+          "outcome": "fp",
+          "detected_rules": [
+            "CG-PY-001"
+          ],
+          "duration_seconds": 0.0017716000002110377
+        },
+        {
+          "id": "safe-sql",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0015949000007822178
+        },
+        {
+          "id": "safe-json",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0015161999999691034
+        },
+        {
+          "id": "safe-yaml",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0015865999994275626
+        },
+        {
+          "id": "safe-yaml-loader",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0013990999996167375
+        },
+        {
+          "id": "safe-literal",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0013689999996131519
+        },
+        {
+          "id": "constant-eval",
+          "outcome": "fp",
+          "detected_rules": [
+            "CG-PY-004"
+          ],
+          "duration_seconds": 0.0015734999997221166
+        },
+        {
+          "id": "safe-secret-env",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0014336999993247446
+        },
+        {
+          "id": "safe-comment",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0013846000001649372
+        }
+      ]
+    },
+    {
+      "tp": 8,
+      "fp": 2,
+      "fn": 2,
+      "tn": 8,
+      "precision": 0.8,
+      "recall": 0.8,
+      "mean_scan_seconds": 0.0015141300001232593,
+      "cases": [
+        {
+          "id": "command-input",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-001"
+          ],
+          "duration_seconds": 0.0015954000009514857
+        },
+        {
+          "id": "command-alias",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-001"
+          ],
+          "duration_seconds": 0.001438600000255974
+        },
+        {
+          "id": "sql-format",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-002"
+          ],
+          "duration_seconds": 0.001869300000180374
+        },
+        {
+          "id": "sql-variable",
+          "outcome": "fn",
+          "detected_rules": [],
+          "duration_seconds": 0.001705700000457
+        },
+        {
+          "id": "pickle",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-003"
+          ],
+          "duration_seconds": 0.001464700000724406
+        },
+        {
+          "id": "yaml",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-003"
+          ],
+          "duration_seconds": 0.0016627000004518777
+        },
+        {
+          "id": "eval",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-004"
+          ],
+          "duration_seconds": 0.0014228000000002794
+        },
+        {
+          "id": "exec",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-004"
+          ],
+          "duration_seconds": 0.0014226000002963701
+        },
+        {
+          "id": "secret",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-005"
+          ],
+          "duration_seconds": 0.001361200000246754
+        },
+        {
+          "id": "secret-dict",
+          "outcome": "fn",
+          "detected_rules": [],
+          "duration_seconds": 0.001322000000072876
+        },
+        {
+          "id": "safe-command",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0013352999994822312
+        },
+        {
+          "id": "constant-command",
+          "outcome": "fp",
+          "detected_rules": [
+            "CG-PY-001"
+          ],
+          "duration_seconds": 0.0015851999996812083
+        },
+        {
+          "id": "safe-sql",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0021118000004207715
+        },
+        {
+          "id": "safe-json",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0013165000000299187
+        },
+        {
+          "id": "safe-yaml",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.001370199999655597
+        },
+        {
+          "id": "safe-yaml-loader",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0014358999997057253
+        },
+        {
+          "id": "safe-literal",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0015545000005658949
+        },
+        {
+          "id": "constant-eval",
+          "outcome": "fp",
+          "detected_rules": [
+            "CG-PY-004"
+          ],
+          "duration_seconds": 0.001393399999869871
+        },
+        {
+          "id": "safe-secret-env",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0014233000001695473
+        },
+        {
+          "id": "safe-comment",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0014914999992470257
+        }
+      ]
+    },
+    {
+      "tp": 8,
+      "fp": 2,
+      "fn": 2,
+      "tn": 8,
+      "precision": 0.8,
+      "recall": 0.8,
+      "mean_scan_seconds": 0.0014837700000498444,
+      "cases": [
+        {
+          "id": "command-input",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-001"
+          ],
+          "duration_seconds": 0.0014669000011053868
+        },
+        {
+          "id": "command-alias",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-001"
+          ],
+          "duration_seconds": 0.0014097000002948334
+        },
+        {
+          "id": "sql-format",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-002"
+          ],
+          "duration_seconds": 0.0015007000001787674
+        },
+        {
+          "id": "sql-variable",
+          "outcome": "fn",
+          "detected_rules": [],
+          "duration_seconds": 0.0014895000003889436
+        },
+        {
+          "id": "pickle",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-003"
+          ],
+          "duration_seconds": 0.0014530000007653143
+        },
+        {
+          "id": "yaml",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-003"
+          ],
+          "duration_seconds": 0.00134529999922961
+        },
+        {
+          "id": "eval",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-004"
+          ],
+          "duration_seconds": 0.0013694999997824198
+        },
+        {
+          "id": "exec",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-004"
+          ],
+          "duration_seconds": 0.0014295999990281416
+        },
+        {
+          "id": "secret",
+          "outcome": "tp",
+          "detected_rules": [
+            "CG-PY-005"
+          ],
+          "duration_seconds": 0.0016707000013411744
+        },
+        {
+          "id": "secret-dict",
+          "outcome": "fn",
+          "detected_rules": [],
+          "duration_seconds": 0.0014420999996218598
+        },
+        {
+          "id": "safe-command",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0015407999999297317
+        },
+        {
+          "id": "constant-command",
+          "outcome": "fp",
+          "detected_rules": [
+            "CG-PY-001"
+          ],
+          "duration_seconds": 0.0015289000002667308
+        },
+        {
+          "id": "safe-sql",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0014878000001772307
+        },
+        {
+          "id": "safe-json",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0013303999985510018
+        },
+        {
+          "id": "safe-yaml",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.001389299999573268
+        },
+        {
+          "id": "safe-yaml-loader",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0013812999986839714
+        },
+        {
+          "id": "safe-literal",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.002273300000524614
+        },
+        {
+          "id": "constant-eval",
+          "outcome": "fp",
+          "detected_rules": [
+            "CG-PY-004"
+          ],
+          "duration_seconds": 0.0012834999997721752
+        },
+        {
+          "id": "safe-secret-env",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.0014952000001358101
+        },
+        {
+          "id": "safe-comment",
+          "outcome": "tn",
+          "detected_rules": [],
+          "duration_seconds": 0.001387900001645903
+        }
+      ]
+    }
+  ],
+  "repeat_counts_identical": true,
+  "ai_comparison": {
+    "status": "not_run",
+    "model": null,
+    "precision": null,
+    "recall": null,
+    "reason": "未配置真实模型；协议 stub/降级测试不作为模型准确率实验"
+  },
+  "limitations": "20 个手工合成样例，按目标规则的样例级口径，不是项目级或真实世界准确率。标注由实现者准备，尚未独立复核；两种保守常量调用命中按 FP 计。",
+  "dataset_sha256": "aa5831dc9fa13634c5781b2ac28e0d46ca9355f3dd4ca510fd7541f5c936291e"
+}

@@ -26,7 +26,8 @@ _REDACTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
             r"(?i)\b(api[_-]?key|client[_-]?secret|password|"
-            r"access[_-]?token|refresh[_-]?token)\b"
+            r"access[_-]?token|refresh[_-]?token|auth[_-]?token|"
+            r"passwd|secret|private[_-]?key)\b"
             r"\s*[:=]\s*(['\"])[^'\"\r\n]+\2"
         ),
         r'\1 = "[REDACTED]"',
@@ -37,7 +38,7 @@ _REDACTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
         "Bearer [REDACTED]",
     ),
     (
-        re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I),
+        re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
         "[REDACTED_EMAIL]",
     ),
     (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "[REDACTED_SSN]"),
