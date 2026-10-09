@@ -9,9 +9,11 @@
 · [测试报告](docs/tests/graduation-test-report.md) · [材料索引](docs/graduation/README.md)。
 
 现场 Python 集成 427 passed，TS 593 passed/2 skipped，类型/Lint/构建通过；
-30 包离线安装与 13 项安装版检查通过，真实浏览器业务和模型降级通过。
+30 包离线安装通过；Git 导出安装版 AI 成功与降级各 13 项检查通过，真实浏览器业务通过。
 本机 Ollama 的 qwen2.5:3b-instruct-q4_K_M 已完成真实成功及三轮同样本复核，
-静态/AI Precision、Recall 均为 80%，本次没有指标提升。验收提交与导出证据见材料索引。
+静态/AI Precision、Recall 均为 80%，本次没有指标提升。
+软件固定为 `1ef74c9`，本地标签 `v1.0.0-graduation`；正式交付含 17 页论文 PDF、
+11 页答辩 PPT 和源码快照，见 [验收与交付记录](docs/graduation/acceptance.md)。
 新 Web 不改变下文既有 CLI 扫描规则和 FindingSource。
 
 ## 当前开发文档（2026-09-23）

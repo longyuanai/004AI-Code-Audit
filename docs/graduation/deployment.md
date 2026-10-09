@@ -4,78 +4,30 @@
 扫描。Python 3.11+ 是原包声明范围，本轮未实跑其他 Python、Linux、Docker 或
 远程 CI。第一版作为本地单用户毕业设计演示使用。
 
-## 已安装版本启动
 
-本轮全新离线环境位于 `artifacts/graduation-20261009/standalone-env`，可以从任意
-目录运行以下命令（PowerShell，将项目根路径替换为你的检出目录）：
+## 正式交付包的快速离线安装与运行
 
-```powershell
-$projectRoot = 'E:\001项目\000开发\Longyuan AI Security Suite\002AI-Code-Audit'
-$pythonExe = Join-Path $projectRoot 'artifacts/graduation-20261009/standalone-env/Scripts/python.exe'
-& $pythonExe -I -m ai_code_audit.web.server --port 8765 --data-dir (Join-Path $projectRoot 'artifacts/web-data')
-```
-
-启动后访问终端打印的本机地址。端口占用时换一个端口，或 `--port 0` 让系统分配；
-不得为演示关闭安全软件或改为公网监听。数据目录正被其他实例使用时，启动失败；
-先正常结束原实例。Ctrl+C 结束服务会等当前受限任务完成后退出。
-
-## 可复现离线安装
-
-本轮部署候选包 `artifacts/graduation-20261009/portable-wheels-final` 包含 30 个
-wheel、requirements.txt（每包版本及 SHA-256）和 manifest.json。包内已包含 HTML/
-CSS/JS；product 与 shared-llm-core 从 site-packages 导入，不使用开发 PYTHONPATH。
+正式交付目录的 06-部署与使用手册 含 install-graduation.ps1、start-graduation.ps1 与 wheelhouse。原仓中脚本位于 packaging。
+打开 PowerShell 到本目录，使用本机 CPython 3.14 x64 的绝对路径：
 
 ```powershell
-$wheelhouse = 'D:\交付验证\portable-wheels-final' # 搬到与源码无关的目录亦可
-$pythonExe = 'C:\你的Python路径\python.exe'        # 使用实际绝对路径
-& $pythonExe -m venv 'D:\交付验证\runtime'
-$runtimePython = 'D:\交付验证\runtime\Scripts\python.exe'
-& $runtimePython -m pip install --no-index --find-links $wheelhouse --require-hashes -r (Join-Path $wheelhouse 'requirements.txt')
-& $runtimePython -m pip check
-& $runtimePython -I -m ai_code_audit.web.server --port 8765 --data-dir 'D:\交付验证\data'
-```
-
-如果使用 uv 创建的环境默认未带 pip，可用已有 uv 替代安装命令：
-`uv pip install --python <runtimePython> --no-index --find-links <wheelhouse> --require-hashes -r <requirements.txt>`，
-然后 `uv pip check --python <runtimePython>`。本轮实际采用 uv，完整命令/退出码见测试报告。
-wheelhouse 当前原生轮子针对 Windows x64/CPython 3.14；换平台应按目标平台重新
-收集并锁定 wheel，不应直接复制该虚拟环境。
-
-开发 pyproject 继续使用同级 shared-llm-core 路径依赖。Poetry 构建的原始 wheel
-会把它写成开发机器文件 URL。`scripts/prepare_graduation_wheels.py` 仅对独立安装
-产物把这一项改成随包提供的版本约束，并重新生成 RECORD；原始 wheel 保留。
-这不是删依赖或跳过解析，最终安装使用完整哈希锁和正常依赖解析。复现构建：
-
-```powershell
-uv build --offline --wheel --out-dir artifacts/my-build-wheels
-uv build ../000shared-llm-core --offline --wheel --out-dir artifacts/my-build-wheels
-# 联网获取当前锁定的既有依赖；离线构建本身需要 poetry-core 已可用
-& $pythonExe -m pip download --only-binary=:all: -r packaging/requirements-graduation.txt -d artifacts/my-build-wheels
-& $pythonExe scripts/prepare_graduation_wheels.py --source artifacts/my-build-wheels --destination artifacts/my-portable-wheels
-```
-
-独立产物目录必须新建；脚本拒绝覆盖旧目录。共享源码只读构建，不复制为第二套
-活跃源码。当前 wheel 基于工作区候选代码而非最终验收提交；不可将其当成已经
-发布的 v1.0.0-graduation。
-
-正式交付包会另从固定 Git 提交构建，并用随包的
-`packaging/install-graduation.ps1` 在新环境安装。安装脚本检查 Windows x64 /
-CPython 3.14，执行 venv、完整哈希校验和 pip check，拒绝覆盖旧环境。
-交付目录中两份脚本放在 `06-部署与运行/`，同级为 wheelhouse：
-
-```powershell
-# 在 06-部署与运行 目录执行，填写本机已安装 Python 的实际绝对路径
 .\install-graduation.ps1 -PythonExecutable 'C:\你的Python路径\python.exe'
 .\start-graduation.ps1
-# 用户已有该本机模型时显式启用，否则模型不可用时保留静态结果
+# 已有本机 Ollama 与指定 Qwen 模型时启用
 .\start-graduation.ps1 -UseVerifiedLocalModel
 ```
 
-脚本仅调用已经安装的可信服务；启动默认回环端口 8765，可用 `-Port 0`。
-模型参数不下载模型，不代表其他机器也已部署 Ollama。最终安装结果和源码版本
-以交付验收记录为准，候选环境仅保留为过程证据。
+默认新建 runtime 与 data，已有 runtime 时安装拒绝覆盖；升级用 -RuntimeDirectory
+另选目录。启动可用 -Port 0 避免占用，数据目录可用 -DataDirectory 指定。
+本轮实际运行这两份导出脚本，并验证安装版的 AI 成功和降级；交付不携带验证
+虚拟环境、运行数据库、模型权重或密钥。接收机器仍需自行安装相同平台 Python。
+开发 pyproject 保留原共享核心路径依赖。独立产物只将该 file URL 改为随包
+shared-llm-core 0.6.0 约束并重新生成 RECORD，源码依赖未变；安装仍执行完整
+依赖解析与哈希检查。复现方法与材料脚本在 Git 源码快照中保留。
+所有原生 wheel 仅针对已实测 Windows x64 / CPython 3.14，换平台需另行准备和验证。
 
 ## 开发环境启动
+
 
 继续按原仓说明安装 Python 包及同级 shared-llm-core，或在完整套件源码环境配置
 src、共享 src 和已有 .python-deps 为 PYTHONPATH，再运行

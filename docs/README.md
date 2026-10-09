@@ -2,7 +2,8 @@
 
 2026-10-09 本地毕业设计业务见 [材料索引](graduation/README.md)、
 [基线审计](audits/graduation-baseline.md) 与 [测试报告](tests/graduation-test-report.md)。
-本机核心流程与真实 Qwen 模型复核已验证，最终提交和导出证据见材料索引；
+本机核心流程与真实 Qwen 模型复核已验证，最终版本、正式目录和哈希见
+[验收与交付记录](graduation/acceptance.md)；
 本地演示不等同公网产品或学校学术验收。
 
 > 本页是 AI-CodeGuard 当前文档集的入口，帮助你快速找到“总览、设计细节、开发说明、决策记录”四类信息。
