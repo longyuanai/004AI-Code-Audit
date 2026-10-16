@@ -4,7 +4,16 @@ on:
   push:
     branches:
       - main
+      - agent/ai-codeguard-fusion
+      - ci/review-20261016
   pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CODEGUARD_E2E: '0'
+  CODEGUARD_ENABLE_LLM: '0'
 
 jobs:
   build-and-test:
@@ -53,7 +62,7 @@ jobs:
       # C2 store (EnrichmentCacheError, chunked queries): 002AI-Vulnerability-
       # Agent dcb2f29 on agent/commercial-docs (pushed 2026-09-24).
       VULN_MODULE_REF: dcb2f291301129df257bdf48baf90ca694174a39
-      SHARED_LLM_CORE_REF: master
+      SHARED_LLM_CORE_REF: 8dd1bbd5e855d68e5476540f7e533af596f1cf46
     steps:
       - name: Require a pinned vulnerability-analysis commit
         run: |
@@ -100,7 +109,7 @@ jobs:
           "tree-sitter>=0.25,<0.27" "tree-sitter-cpp==0.23.4"
           "tree-sitter-python==0.25.0" "tree-sitter-go==0.25.0"
           "tree-sitter-java==0.23.5" "tree-sitter-typescript==0.23.2"
-          "httpx>=0.27,<0.28" "pydantic>=2.7,<3" "pyyaml>=6.0.1,<7"
+          "httpx>=0.28,<0.29" "pydantic>=2.7,<3" "pyyaml>=6.0.1,<7"
           "tenacity>=8.3,<9" "python-dotenv>=1.0.1,<2" "jinja2>=3.1.4,<4"
           "click>=8.1.7,<9" "rich>=13.7.1,<14" "defusedxml>=0.7.1,<0.8"
           "fastapi>=0.139.2,<0.140.0" "uvicorn>=0.51,<1.0"
